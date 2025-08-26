@@ -82,37 +82,3 @@ module.exports = {
   }
 }
 ```
-
-## Estructura y convención de nombres
-
-- El plugin normaliza nombres (por ejemplo `Primary / 500` -> `primary-500`) y genera variables con notación kebab-case. Puedes ajustar la normalización en el código si requieres otra convención.
-
-## Notas sobre `manifest.json`
-
-- Asegúrate de que `manifest.json` referencia correctamente los archivos generados por el build (`main` a `code.js` y `ui` a `ui.html`).
-- Si trabajas con TypeScript, confirma que el proceso de build transpila `code.ts` a `code.js` antes de importar el plugin en Figma.
-
-## Debugging y solución de problemas
-
-- Plugin no aparece / falla al cargar: revisa que `manifest.json` tenga rutas correctas y que `code.js` exista si usas TypeScript.
-- Errores en la UI: abre la consola del plugin en Figma (Plugins → Development → Open Console) para ver trazas y errores.
-- Problemas con tokens faltantes: verifica que los estilos en Figma estén publicados o aplicados como estilos globales.
-
-## Tests y calidad
-
-- Para proyectos más grandes, añade pruebas unitarias (por ejemplo Jest + ts-jest) y linters (ESLint/Prettier).
-
-## Sugerencias futuras
-
-- Exportar a más formatos (SCSS, variables para frameworks, integración con Style Dictionary).
-- Guardar presets de exportación.
-- Integración automática con proyectos que usan Tailwind.
-
-## Licencia
-
-Agrega aquí la licencia que prefieras (por ejemplo, `MIT`). Si no has decidido, puedes usar `UNLICENSED` hasta que elijas una.
-
-## Cómo contribuir
-
-1. Forkea el repositorio y crea una rama descriptiva: `git checkout -b feature/mi-cambio`.
-2. Haz tus cambios y sube un PR describiendo el propósito.
