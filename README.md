@@ -116,7 +116,3 @@ Agrega aquí la licencia que prefieras (por ejemplo, `MIT`). Si no has decidido,
 
 1. Forkea el repositorio y crea una rama descriptiva: `git checkout -b feature/mi-cambio`.
 2. Haz tus cambios y sube un PR describiendo el propósito.
-
----
-
-¿Quieres que incluya capturas de la UI, instrucciones específicas del proceso de build (por ejemplo con `esbuild` o `rollup`) o ejemplos reales tomados de tu proyecto? Puedo actualizar el `README.md` con esos detalles.
