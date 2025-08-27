@@ -46,6 +46,13 @@ interface TwData {
   fontFamily: Record<string, string>;
   tokens?: Record<string, string>;
 }
+// Estructura para Style Dictionary
+interface SdTokens {
+  color: Record<string, Record<string, { value: string }>>;
+  spacing: Record<string, { value: string }>;
+  typography: Record<string, { value: string }>;
+  other: Record<string, { value: string }>;
+}
 
 // Estructuras de datos para organizar las líneas de CSS antes de generarlas
 type Line = { name: string; text: string; order?: number };
@@ -107,7 +114,7 @@ figma.ui.onmessage = async (msg: UIRequest) => {
       
       const selectedVars = allVariables.filter(v => selectedCollectionIds.has(v.variableCollectionId));
 
-      const { css, tailwind } = await processAndGenerateCode({
+      const { css, tailwind, sdTokens } = await processAndGenerateCode({
         selectedVars, allCollections, nameMode, prefix, unitPxForFloat, modesByCollection
       });
 
@@ -115,7 +122,8 @@ figma.ui.onmessage = async (msg: UIRequest) => {
         type: "RESULT",
         payload: {
           css: format.indexOf("css") !== -1 ? css : "",
-          tailwind: format.indexOf("tailwind") !== -1 ? tailwind : ""
+          tailwind: format.indexOf("tailwind") !== -1 ? tailwind : "",
+          sdTokens
         }
       });
 
@@ -150,6 +158,7 @@ async function processAndGenerateCode(options: {
   lineHeight: {}, letterSpacing: {}, fontWeight: {}, fontFamily: {},
   tokens: {},
   };
+  const sdTokens: SdTokens = { color: {}, spacing: {}, typography: {}, other: {} };
   
   const modesMap: Record<string, string[]> = {};
   for (const c of allCollections) {
@@ -200,14 +209,52 @@ async function processAndGenerateCode(options: {
       // Ensure we always create a tailwind mapping. Fallback to var(--name) when none provided.
       if (!tailwindEntry) tailwindEntry = `var(${cssVarName})`;
       assignToTailwindData(twData, category, subName, tokenName, tailwindEntry);
+
+      // --- Añadir al objeto de Style Dictionary ---
+      try {
+        if (v.resolvedType === 'COLOR') {
+          const rgba = resolvedValue as RGBA;
+          const val = rgba && typeof rgba === 'object' && rgba.r !== undefined
+            ? rgbaToHexOrRgba(rgba)
+            : String(resolvedValue);
+          const parts = tokenName.split('-');
+          const family = parts.slice(0, -1).join('-') || tokenName;
+          const shade = parts[parts.length - 1] || 'DEFAULT';
+          sdTokens.color[family] = sdTokens.color[family] || {};
+          sdTokens.color[family][shade] = { value: val };
+        } else if (v.resolvedType === 'FLOAT' || v.resolvedType === 'STRING') {
+          sdTokens.other[tokenName] = { value: String(resolvedValue) };
+        }
+      } catch (e) {
+        // no bloquear la generación por errores en el sd mapping
+        console.error('Error al mapear token a sdTokens:', e);
+      }
     }
   }
 
   const cssOutput = composeCssOutput(catsPerBlock, blockMeta, modesMap, allCollections);
   const tailwindOutput = composeTailwindOutput(twData);
 
-  return { css: cssOutput, tailwind: tailwindOutput };
+  return { css: cssOutput, tailwind: tailwindOutput, sdTokens };
 }
+
+// --- Helpers adicionales para SD ---
+function rgbaToHexOrRgba(rgba: RGBA | null | undefined): string {
+  if (!rgba || typeof rgba !== 'object' || rgba.r == null) return String(rgba);
+  const r = Math.round(rgba.r * 255);
+  const g = Math.round(rgba.g * 255);
+  const b = Math.round(rgba.b * 255);
+  const a = rgba.a ?? 1;
+  if (a >= 1) {
+    const toHex = (n: number) => {
+      const s = n.toString(16);
+      return s.length === 1 ? '0' + s : s;
+    };
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  }
+  return `rgba(${r}, ${g}, ${b}, ${Number((a as number).toFixed(3))})`;
+}
+
 
 
 // --- FUNCIONES DE CLASIFICACIÓN Y ORGANIZACIÓN ---
@@ -241,7 +288,7 @@ function classifyByTokenName(tokenName: string, resolvedType: VariableResolvedDa
   const parts = tokenName.split('-');
   const first = parts[0];
   const whole = tokenName;
-  const norm = whole.replace(/[\s_\-]/g, '').toLowerCase();
+    const norm = whole.replace(/[\s_-]/g, '').toLowerCase();
 
   // Typography family
   if (first === 'typography' || norm.includes('font') || norm.includes('text')) {
@@ -283,7 +330,7 @@ function getSpacingSubgroup(path: string): string {
 
 function getTypographySubgroup(path: string): string {
   const p = path.toLowerCase();
-  const norm = p.replace(/[\s_\-]/g, ""); // normalize camel/snake/kebab
+    const norm = p.replace(/[\s_-]/g, ""); // normalize camel/snake/kebab
   if (norm.includes("family")) return "Family";
   if (norm.includes("weight")) return "Weight";
   if (norm.includes("lineheight")) return "Line Height";

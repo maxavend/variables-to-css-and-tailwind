@@ -305,10 +305,12 @@
       <div class="section-body">
         <textarea id="out-css" class="textarea" aria-label="CSS code" placeholder=":root { --token: value; }"></textarea>
         <textarea id="out-tw" class="textarea" aria-label="Tailwind snippet" style="display:none" placeholder="theme.extend.colors = {}"></textarea>
+        <textarea id="out-sd" class="textarea" aria-label="Style Dictionary JSON" style="display:none" placeholder="{ \"color\": { ... } }"></textarea>
         <div class="actions" style="margin-top: 8px;">
           <button id="copy-css" class="btn btn--secondary">Copy CSS</button>
           <button id="copy-tw" class="btn btn--secondary">Copy Tailwind</button>
           <button id="run" class="btn btn--default">Generate</button>
+          <button id="export-sd" class="btn btn--default">Export SD JSON</button>
         </div>
       </div>
     </div>
@@ -511,9 +513,13 @@
       const msg = e.data.pluginMessage || {};
       if(msg.type==='INIT_DATA'){ renderCollections(msg.payload); }
       if(msg.type==='RESULT'){
-        const { css, tailwind } = msg.payload || {};
+        const { css, tailwind, sdTokens } = msg.payload || {};
         outCss.value = css || '';
         outTw.value = tailwind || '';
+        if (sdTokens) {
+          document.getElementById('out-sd').value = JSON.stringify(sdTokens, null, 2);
+          document.getElementById('out-sd').style.display = '';
+        }
         const fmts = getFormats();
         if(fmts.length===1){ activateTab(fmts[0]==='css'?'css':'tw'); }
         else if (fmts.includes('css')) { activateTab('css'); }
@@ -521,6 +527,16 @@
       }
     };
     parent.postMessage({ pluginMessage: { type:'INIT' } }, '*');
+
+    document.getElementById('export-sd').addEventListener('click', () => {
+      const text = document.getElementById('out-sd').value;
+      if (!text) return toast('No SD JSON available');
+      const blob = new Blob([text], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'tokens.json'; a.click(); URL.revokeObjectURL(url);
+      toast('SD JSON descargado');
+    });
 </script>
 
 </body>
