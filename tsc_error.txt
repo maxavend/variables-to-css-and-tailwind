@@ -1,0 +1,20 @@
+node_modules/@figma/plugin-typings/index.d.ts(10,9): error TS2451: Cannot redeclare block-scoped variable 'console'.
+node_modules/@figma/plugin-typings/index.d.ts(27,9): error TS2451: Cannot redeclare block-scoped variable 'fetch'.
+node_modules/@types/babel__core/index.d.ts(2,31): error TS2792: Cannot find module '@babel/parser'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
+node_modules/@types/babel__core/index.d.ts(5,20): error TS2792: Cannot find module '@babel/types'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
+node_modules/@types/babel__core/index.d.ts(10,52): error TS2792: Cannot find module '@babel/parser'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
+node_modules/@types/babel__generator/index.d.ts(1,20): error TS2792: Cannot find module '@babel/types'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
+node_modules/@types/babel__template/index.d.ts(1,31): error TS2792: Cannot find module '@babel/parser'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
+node_modules/@types/babel__template/index.d.ts(2,48): error TS2792: Cannot find module '@babel/types'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
+node_modules/@types/babel__traverse/index.d.ts(1,20): error TS2792: Cannot find module '@babel/types'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
+node_modules/@types/babel__traverse/index.d.ts(361,28): error TS2536: Type '"type"' cannot be used to index type 'T'.
+node_modules/@types/node/http.d.ts(2176,36): error TS2792: Cannot find module 'undici-types'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
+node_modules/@types/node/http.d.ts(2180,37): error TS2792: Cannot find module 'undici-types'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
+node_modules/@types/node/http.d.ts(2184,39): error TS2792: Cannot find module 'undici-types'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
+node_modules/@types/node/web-globals/console.d.ts(8,9): error TS2451: Cannot redeclare block-scoped variable 'console'.
+node_modules/@types/node/web-globals/fetch.d.ts(3,25): error TS2792: Cannot find module 'undici-types'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
+node_modules/@types/node/web-globals/fetch.d.ts(23,14): error TS2451: Cannot redeclare block-scoped variable 'fetch'.
+node_modules/@types/node/worker_threads.d.ts(71,34): error TS2792: Cannot find module 'undici-types'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
+node_modules/@types/react-dom/index.d.ts(91,22): error TS2304: Cannot find name 'ReferrerPolicy'.
+node_modules/@types/react-dom/index.d.ts(97,31): error TS2304: Cannot find name 'RequestDestination'.
+node_modules/@types/react/index.d.ts(7,22): error TS2792: Cannot find module 'csstype'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?

@@ -279,6 +279,10 @@
                     <input id="fmt-tw" class="check" type="checkbox" checked>
                     <span style="font-size: 14px; color: var(--text);">Tailwind</span>
                 </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input id="fmt-xl" class="check" type="checkbox">
+                    <span style="font-size: 14px; color: var(--text);">Excel (CSV)</span>
+                </label>
             </div>
         </div>
         <div class="form-group">
@@ -298,16 +302,19 @@
       <header class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
         <h2 class="section-title">Output</h2>
         <div class="pills">
-          <button id="tab-css" class="pill active" type="button">CSS</button>
-          <button id="tab-tw" class="pill" type="button">Tailwind</button>
+           <button id="tab-css" class="pill active" type="button">CSS</button>
+           <button id="tab-tw" class="pill" type="button">Tailwind</button>
+           <button id="tab-xl" class="pill" type="button">Excel (CSV)</button>
         </div>
       </header>
       <div class="section-body">
         <textarea id="out-css" class="textarea" aria-label="CSS code" placeholder=":root { --token: value; }"></textarea>
         <textarea id="out-tw" class="textarea" aria-label="Tailwind snippet" style="display:none" placeholder="theme.extend.colors = {}"></textarea>
+        <textarea id="out-xl" class="textarea" aria-label="Excel CSV" style="display:none" placeholder="Figma Path, Figma Value, Code Name, Code Value"></textarea>
         <div class="actions" style="margin-top: 8px;">
           <button id="copy-css" class="btn btn--secondary">Copy CSS</button>
           <button id="copy-tw" class="btn btn--secondary">Copy Tailwind</button>
+          <button id="copy-xl" class="btn btn--secondary">Copy CSV</button>
           <button id="run" class="btn btn--default">Generate</button>
         </div>
       </div>
@@ -381,24 +388,30 @@
     });
 
     // ===== Tabs
-    const tabCss=$('#tab-css'), tabTw=$('#tab-tw');
-    const outCss=$('#out-css'), outTw=$('#out-tw');
+    const tabCss=$('#tab-css'), tabTw=$('#tab-tw'), tabXl=$('#tab-xl');
+    const outCss=$('#out-css'), outTw=$('#out-tw'), outXl=$('#out-xl');
     function activateTab(t){
       const copyCssBtn = $('#copy-css');
       const copyTwBtn = $('#copy-tw');
+      const copyXlBtn = $('#copy-xl');
       if(t==='css'){
-        tabCss.classList.add('active'); tabTw.classList.remove('active');
-        outCss.style.display=''; outTw.style.display='none';
-        copyCssBtn.style.display=''; copyTwBtn.style.display='none';
+        tabCss.classList.add('active'); tabTw.classList.remove('active'); tabXl.classList.remove('active');
+        outCss.style.display=''; outTw.style.display='none'; outXl.style.display='none';
+        copyCssBtn.style.display=''; copyTwBtn.style.display='none'; copyXlBtn.style.display='none';
       }
-      else{
-        tabTw.classList.add('active'); tabCss.classList.remove('active');
-        outTw.style.display=''; outCss.style.display='none';
-        copyTwBtn.style.display=''; copyCssBtn.style.display='none';
+      else if (t==='tw'){
+        tabTw.classList.add('active'); tabCss.classList.remove('active'); tabXl.classList.remove('active');
+        outTw.style.display=''; outCss.style.display='none'; outXl.style.display='none';
+        copyTwBtn.style.display=''; copyCssBtn.style.display='none'; copyXlBtn.style.display='none';
+      } else {
+        tabXl.classList.add('active'); tabCss.classList.remove('active'); tabTw.classList.remove('active');
+        outXl.style.display=''; outCss.style.display='none'; outTw.style.display='none';
+        copyXlBtn.style.display=''; copyCssBtn.style.display='none'; copyTwBtn.style.display='none';
       }
     }
     tabCss.addEventListener('click',()=>activateTab('css'));
     tabTw.addEventListener('click',()=>activateTab('tw'));
+    tabXl.addEventListener('click',()=>activateTab('xl'));
     activateTab('css'); // Initialize correctly
 
     // ===== Collections
@@ -489,11 +502,12 @@
     }
 
     function getNameMode(){ const r=$('input[name="namemode"]:checked'); return (r?.value||'code-syntax'); }
-    function getFormats(){ const a=[]; if($('#fmt-css').checked)a.push('css'); if($('#fmt-tw').checked)a.push('tailwind'); return a; }
+    function getFormats(){ const a=[]; if($('#fmt-css').checked)a.push('css'); if($('#fmt-tw').checked)a.push('tailwind'); if($('#fmt-xl').checked)a.push('excel'); return a; }
 
     // ===== Actions
     $('#copy-css').addEventListener('click',()=>copyFrom('out-css'));
     $('#copy-tw').addEventListener('click',()=>copyFrom('out-tw'));
+    $('#copy-xl').addEventListener('click',()=>copyFrom('out-xl'));
     $('#run').addEventListener('click',()=>{
       const payload = {
         collectionIds: $$('#collections .coll-check:checked').map(i=>i.value),
@@ -511,13 +525,15 @@
       const msg = e.data.pluginMessage || {};
       if(msg.type==='INIT_DATA'){ renderCollections(msg.payload); }
       if(msg.type==='RESULT'){
-        const { css, tailwind } = msg.payload || {};
+        const { css, tailwind, excel } = msg.payload || {};
         outCss.value = css || '';
         outTw.value = tailwind || '';
+        outXl.value = excel || '';
         const fmts = getFormats();
-        if(fmts.length===1){ activateTab(fmts[0]==='css'?'css':'tw'); }
+        if(fmts.length===1){ activateTab(fmts[0]==='css'?'css':fmts[0]==='tailwind'?'tw':'xl'); }
         else if (fmts.includes('css')) { activateTab('css'); }
         else if (fmts.includes('tailwind')) { activateTab('tw'); }
+        else if (fmts.includes('excel')) { activateTab('xl'); }
       }
     };
     parent.postMessage({ pluginMessage: { type:'INIT' } }, '*');

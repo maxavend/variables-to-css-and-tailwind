@@ -7,7 +7,7 @@ figma.showUI(__html__, { width: 820, height: 900 });
 
 // --- TIPOS GLOBALES Y ESTRUCTURAS DE DATOS ---
 
-type ExportFormat = "css" | "tailwind";
+type ExportFormat = "css" | "tailwind" | "excel";
 type NameMode = "code-syntax" | "figma-name";
 type CategoryKey = "Colors" | "Spacing" | "Typography" | "Other";
 
@@ -24,14 +24,7 @@ interface UIRequest {
   };
 }
 
-// Extiende el tipo `Variable` para incluir posibles campos de sintaxis de código personalizados
-type VariableWithCodeSyntax = Variable & Partial<{
-  codeSyntax: string;
-  code_syntax: string;
-  codeName: string;
-  nameForCode: string;
-  nameForCodeSyntax: string;
-}>;
+
 
 // Estructura para organizar los datos que se enviarán a la configuración de Tailwind
 interface TwData {
@@ -44,15 +37,34 @@ interface TwData {
   letterSpacing: Record<string, string>;
   fontWeight: Record<string, string>;
   fontFamily: Record<string, string>;
+  blur: Record<string, string>;
+  opacity: Record<string, string>;
+  boxShadow: Record<string, string>;
+  strokeWidth: Record<string, string>;
   tokens?: Record<string, string>;
 }
 
 // Estructuras de datos para organizar las líneas de CSS antes de generarlas
 type Line = { name: string; text: string; order?: number };
-type Group = Record<string, Line[]>;
-type Sub = { groups: Group };
-type Bucket = { subs: Record<string, Sub> };
-type CatsObj = Record<CategoryKey, Bucket>;
+type FolderNode = {
+  lines: Line[];
+  subFolders: Record<string, FolderNode>;
+};
+function createFolderNode(): FolderNode { return { lines: [], subFolders: {} }; }
+
+// Custom interface strictly for Excel metadata lines
+interface ExcelLine {
+  figmaPath: string;
+  figmaValueString: string;
+  codeSyntax: string;
+  codeValue: string;
+  order?: number;
+  name: string;
+}
+interface ExcelFolderNode {
+  subFolders: Record<string, ExcelFolderNode>;
+  lines: ExcelLine[];
+}
 
 
 // --- MANEJO DE MENSAJES DE LA UI (PUNTO DE ENTRADA) ---
@@ -107,7 +119,7 @@ figma.ui.onmessage = async (msg: UIRequest) => {
       
       const selectedVars = allVariables.filter(v => selectedCollectionIds.has(v.variableCollectionId));
 
-      const { css, tailwind } = await processAndGenerateCode({
+      const { css, tailwind, excel } = await processAndGenerateCode({
         selectedVars, allCollections, nameMode, prefix, unitPxForFloat, modesByCollection
       });
 
@@ -115,7 +127,8 @@ figma.ui.onmessage = async (msg: UIRequest) => {
         type: "RESULT",
         payload: {
           css: format.indexOf("css") !== -1 ? css : "",
-          tailwind: format.indexOf("tailwind") !== -1 ? tailwind : ""
+          tailwind: format.indexOf("tailwind") !== -1 ? tailwind : "",
+          excel: format.indexOf("excel") !== -1 ? excel : ""
         }
       });
 
@@ -143,13 +156,20 @@ async function processAndGenerateCode(options: {
 }) {
   const { selectedVars, allCollections, nameMode, prefix, unitPxForFloat, modesByCollection } = options;
 
-  const catsPerBlock: Record<string, CatsObj> = {};
+  const rootPerBlock: Record<string, FolderNode> = {};
   const blockMeta: Record<string, { collectionName: string; modeName: string; selector: string }> = {};
   const twData: TwData = {
     colors: {}, spacing: {}, borderRadius: {}, borderWidth: {}, fontSize: {},
-  lineHeight: {}, letterSpacing: {}, fontWeight: {}, fontFamily: {},
-  tokens: {},
+    lineHeight: {}, letterSpacing: {}, fontWeight: {}, fontFamily: {},
+    blur: {}, opacity: {}, boxShadow: {}, strokeWidth: {},
+    tokens: {},
   };
+  // Track which Figma collection each token name belongs to
+  const twTokenCollectionMap: Record<string, string> = {};
+  // Track the order collections appear
+  const collectionOrder: string[] = [];
+  
+  const rootExcelBlock: Record<string, ExcelFolderNode> = {};
   
   const modesMap: Record<string, string[]> = {};
   for (const c of allCollections) {
@@ -182,31 +202,63 @@ async function processAndGenerateCode(options: {
       const tokenName = makeTokenName(v, col.name, nameMode);
       const cssVarName = toCssVar(tokenName, prefix);
       const { category, subName } = classifyVariable(v, col, nameMode, tokenName);
-      const pathSegments = getCleanedPathSegments(v, col.name);
-      const h3Group = chooseH3Group(category, subName, pathSegments);
       
-      const blockKey = ensureBlock(col, mId, catsPerBlock, blockMeta, modesMap);
-      const groupArray = getGroupArray(catsPerBlock[blockKey], category, subName, h3Group);
+      const blockKey = ensureBlock(col, mId, rootPerBlock, blockMeta, modesMap);
       
   const out = formatOutputLine({ v, resolvedValue, aliasSourceVar, allCollections, cssVarName, nameMode, prefix, unitPxForFloat });
   const cssLine = out.cssLine;
   let tailwindEntry = out.tailwindEntry;
 
       if (cssLine) {
-        // Preserve original order by attaching an index. Use the index from selectedVars.
         const originalIndex = selectedVars.indexOf(v);
-        (groupArray as Array<Line>).push({ name: tokenName, text: cssLine, order: originalIndex });
+        const segments = (v.name || '').split('/').map(s => s.trim()).filter(Boolean);
+        let currentNode = rootPerBlock[blockKey];
+        let cvExcelNode: ExcelFolderNode = rootExcelBlock[blockKey] || (rootExcelBlock[blockKey] = { subFolders: {}, lines: [] });
+                
+        for (let i = 0; i < segments.length - 1; i++) {
+          const seg = segments[i];
+          if (!currentNode.subFolders[seg]) currentNode.subFolders[seg] = createFolderNode();
+          currentNode = currentNode.subFolders[seg];
+          
+          if (!cvExcelNode.subFolders[seg]) cvExcelNode.subFolders[seg] = { subFolders: {}, lines: [] };
+          cvExcelNode = cvExcelNode.subFolders[seg];
+        }
+        currentNode.lines.push({ name: tokenName, text: cssLine, order: originalIndex });
+        
+        let cvCodeValue = "";
+        let figmaValueString = "";
+        
+        if (aliasSourceVar) {
+             const srcCol = allCollections.find(c => c.id === aliasSourceVar.variableCollectionId)!;
+             figmaValueString = `${srcCol.name}/${aliasSourceVar.name}`;
+             const srcTokenName = makeTokenName(aliasSourceVar, srcCol.name, nameMode);
+             cvCodeValue = `var(${toCssVar(srcTokenName, prefix)})`;
+        } else {
+            figmaValueString = out.rawFigmaValue || cssLine.split(":")[1].replace(";", "").trim();
+            cvCodeValue = cssLine.split(":")[1].replace(";", "").trim();
+        }
+
+        cvExcelNode.lines.push({
+            figmaPath: `${col.name}/${v.name}`,
+            figmaValueString,
+            codeSyntax: cssVarName,
+            codeValue: cvCodeValue,
+            order: originalIndex,
+            name: tokenName // Para usar el getSortRank si se quiere
+        });
       }
-      // Ensure we always create a tailwind mapping. Fallback to var(--name) when none provided.
       if (!tailwindEntry) tailwindEntry = `var(${cssVarName})`;
+      twTokenCollectionMap[tokenName] = col.name;
+      if (collectionOrder.indexOf(col.name) === -1) collectionOrder.push(col.name);
       assignToTailwindData(twData, category, subName, tokenName, tailwindEntry);
     }
   }
 
-  const cssOutput = composeCssOutput(catsPerBlock, blockMeta, modesMap, allCollections);
-  const tailwindOutput = composeTailwindOutput(twData);
+  const cssOutput = composeCssOutput(rootPerBlock, blockMeta, modesMap, allCollections);
+  const tailwindOutput = composeTailwindOutput(twData, twTokenCollectionMap, collectionOrder);
+  const excelOutput = composeExcelOutput(rootExcelBlock, blockMeta, modesMap, allCollections);
 
-  return { css: cssOutput, tailwind: tailwindOutput };
+  return { css: cssOutput, tailwind: tailwindOutput, excel: excelOutput };
 }
 
 
@@ -241,20 +293,55 @@ function classifyByTokenName(tokenName: string, resolvedType: VariableResolvedDa
   const parts = tokenName.split('-');
   const first = parts[0];
   const whole = tokenName;
-  const norm = whole.replace(/[\s_\-]/g, '').toLowerCase();
+  const norm = whole.replace(/[\s_-]/g, '').toLowerCase();
+  const lastPart = parts[parts.length - 1].toLowerCase();
+
+  // Line height — detect BEFORE the general Typography check since "lineheight" doesn't contain "font" or "text"
+  if (first === 'lineheight' || norm.includes('lineheight')) {
+    return { category: 'Typography', subName: 'Line Height' };
+  }
+
+  // Known font weight names
+  const weightNames = new Set(['thin', 'extralight', 'light', 'normal', 'medium', 'semibold', 'bold', 'extrabold', 'black']);
 
   // Typography family
   if (first === 'typography' || norm.includes('font') || norm.includes('text')) {
+    // IMPORTANT: if the resolved type is COLOR, these are text COLOR tokens (e.g. text-accent-default),
+    // NOT font sizes. Route to Colors instead.
+    if (resolvedType === 'COLOR') {
+      return { category: 'Colors', subName: first.charAt(0).toUpperCase() + first.slice(1) };
+    }
+
     if (norm.includes('size')) return { category: 'Typography', subName: 'Font-Size' };
     if (norm.includes('lineheight')) return { category: 'Typography', subName: 'Line Height' };
     if (norm.includes('letterspacing') || norm.includes('tracking')) return { category: 'Typography', subName: 'Letter-Spacing' };
     if (norm.includes('weight')) return { category: 'Typography', subName: 'Weight' };
     if (norm.includes('family')) return { category: 'Typography', subName: 'Family' };
+
+    // text-sm, text-lg, text-2xl, text-base → font sizes (only FLOAT values reach here)
+    if (first === 'text') return { category: 'Typography', subName: 'Font-Size' };
+
+    // font-bold, font-semibold, font-thin, etc. → font weights by name
+    if (first === 'font' && weightNames.has(lastPart)) {
+      return { category: 'Typography', subName: 'Weight' };
+    }
+    // font-inter, font-amx → string values are font families
+    if (first === 'font' && resolvedType === 'STRING') {
+      return { category: 'Typography', subName: 'Family' };
+    }
+    // font-* with float values that aren't known weight names → still likely weights
+    if (first === 'font' && resolvedType === 'FLOAT') {
+      return { category: 'Typography', subName: 'Weight' };
+    }
+
     return { category: 'Typography', subName: 'General' };
   }
 
-  // Spacing family (space, radius, border width)
-  if (first === 'size' || first === 'spacing' || norm.includes('space') || norm.includes('spacing') || norm.includes('gap') || norm.includes('radius') || norm.includes('rounded')) {
+  // Spacing family (space, radius, border width, padding, margin, gap)
+  if (first === 'size' || first === 'spacing' || first === 'p' || first === 'm' || first === 'gap'
+      || norm.includes('space') || norm.includes('spacing') || norm.includes('gap')
+      || norm.includes('radius') || norm.includes('rounded')
+      || norm.includes('padding') || norm.includes('margin')) {
     if (norm.includes('radius') || norm.includes('rounded')) return { category: 'Spacing', subName: 'Radius' };
     if (norm.includes('borderwidth') || (norm.includes('border') && (norm.includes('width') || norm.includes('size'))) || norm.includes('strokewidth')) {
       return { category: 'Spacing', subName: 'Border-Width' };
@@ -283,7 +370,7 @@ function getSpacingSubgroup(path: string): string {
 
 function getTypographySubgroup(path: string): string {
   const p = path.toLowerCase();
-  const norm = p.replace(/[\s_\-]/g, ""); // normalize camel/snake/kebab
+  const norm = p.replace(/[\s_-]/g, ""); // normalize camel/snake/kebab
   if (norm.includes("family")) return "Family";
   if (norm.includes("weight")) return "Weight";
   if (norm.includes("lineheight")) return "Line Height";
@@ -303,11 +390,7 @@ function getCleanedPathSegments(v: Variable, collectionName: string): string[] {
   return rawSegments.filter(s => !genericTerms.has(s.toLowerCase()));
 }
 
-function chooseH3Group(_category: CategoryKey, _subName: string, segments: string[]): string {
-    if (segments.length <= 1) return "__root__";
-    if (segments.length > 2) return segments[1];
-    return "__root__";
-}
+
 
 
 // --- HELPERS DE FORMATO Y COMPOSICIÓN DE SALIDA ---
@@ -328,49 +411,54 @@ function formatOutputLine(options: {
   const { v, resolvedValue, aliasSourceVar, allCollections, cssVarName, nameMode, prefix, unitPxForFloat } = options;
   let cssLine: string | null = null;
   let tailwindEntry: string | null = null;
-  
+  let rawFigmaValue: string | null = null;
+
+  // Helper: RGBA to HEX (6 or 8 digits)
+  function rgbaToHex(rgba: RGBA): string {
+    let hex = "#" + [rgba.r, rgba.g, rgba.b]
+      .map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+    if (rgba.a < 1) {
+      hex += Math.round(rgba.a * 255).toString(16).padStart(2, '0').toUpperCase();
+    }
+    return hex;
+  }
+
   if (aliasSourceVar) {
+    // --- ALIAS: CSS uses var(--ref), Tailwind ALSO references the primitive token ---
     const srcCol = allCollections.find(c => c.id === aliasSourceVar.variableCollectionId)!;
     const srcTokenName = makeTokenName(aliasSourceVar, srcCol.name, nameMode);
     const srcCssVarName = toCssVar(srcTokenName, prefix);
     cssLine = `${cssVarName}: var(${srcCssVarName});`;
-    // Also create a Tailwind entry so aliases are mapped in the Tailwind output
-    if (aliasSourceVar.resolvedType === 'COLOR') {
-      // Use resolvedValue to determine if alpha is present
-      const aliasedVal = resolvedValue as RGBA | undefined;
-      if (aliasedVal && typeof aliasedVal === 'object' && aliasedVal.r !== undefined) {
-        tailwindEntry = (aliasedVal.a < 1) ? `rgb(var(${srcCssVarName}) / <alpha-value>)` : `rgb(var(${srcCssVarName}))`;
-      } else {
-        // fallback: assume opaque to avoid showing empty alpha
-        tailwindEntry = `rgb(var(${srcCssVarName}))`;
-      }
-    } else {
-      tailwindEntry = `var(${srcCssVarName})`;
-    }
+
+    // Semantic tokens reference primitives — keep the indirection
+    tailwindEntry = `var(${srcCssVarName})`;
   } else {
+    // --- PRIMITIVE: CSS uses HEX, Tailwind uses the same cooked value ---
     switch (v.resolvedType) {
       case "COLOR": {
         const rgba = resolvedValue as RGBA;
-        const channels = `${Math.round(rgba.r * 255)} ${Math.round(rgba.g * 255)} ${Math.round(rgba.b * 255)}`;
-        cssLine = `${cssVarName}: ${channels};`;
-        if (rgba.a < 1) cssLine += ` /* alpha: ${rgba.a.toFixed(2)} */`;
-        tailwindEntry = (rgba.a < 1) ? `rgb(var(${cssVarName}) / <alpha-value>)` : `rgb(var(${cssVarName}))`;
+        const hex = rgbaToHex(rgba);
+        rawFigmaValue = hex;
+        cssLine = `${cssVarName}: ${hex};`;
+        tailwindEntry = hex;
         break;
       }
       case "FLOAT": {
         const val = unitPxForFloat ? `${resolvedValue}px` : String(resolvedValue);
+        rawFigmaValue = String(resolvedValue);
         cssLine = `${cssVarName}: ${val};`;
-        tailwindEntry = `var(${cssVarName})`;
+        tailwindEntry = val;
         break;
       }
       case "STRING": {
+        rawFigmaValue = String(resolvedValue);
         cssLine = `${cssVarName}: "${resolvedValue}";`;
-        tailwindEntry = `var(${cssVarName})`;
+        tailwindEntry = String(resolvedValue);
         break;
       }
     }
   }
-  return { cssLine, tailwindEntry };
+  return { cssLine, tailwindEntry, rawFigmaValue };
 }
 
 /**
@@ -380,11 +468,30 @@ function assignToTailwindData(twData: TwData, category: CategoryKey, subName: st
   // Use the last segment ONLY for color shade scale (e.g., "primary-500").
   // For all other maps, use the full token name to avoid collisions like "spacing-16" in multiple families.
   const scaleKey = tokenName.split('-').pop() || tokenName;
+  const norm = tokenName.toLowerCase();
 
   if (category === 'Colors') {
     const family = tokenName.substring(0, tokenName.lastIndexOf('-')) || tokenName;
     if (!twData.colors[family]) twData.colors[family] = {};
     twData.colors[family][scaleKey] = tailwindEntry;
+    return;
+  }
+
+  // Smart routing: detect by token name regardless of category
+  if (norm.startsWith('blur')) {
+    twData.blur[tokenName] = tailwindEntry;
+    return;
+  }
+  if (norm.startsWith('opacity')) {
+    twData.opacity[tokenName] = tailwindEntry;
+    return;
+  }
+  if (norm.startsWith('shadow') || norm.startsWith('drop-shadow')) {
+    twData.boxShadow[tokenName] = tailwindEntry;
+    return;
+  }
+  if (norm.startsWith('stroke')) {
+    twData.strokeWidth[tokenName] = tailwindEntry;
     return;
   }
 
@@ -417,7 +524,9 @@ function assignToTailwindData(twData: TwData, category: CategoryKey, subName: st
       return;
     }
     if (subName === 'Weight') {
-      twData.fontWeight[tokenName] = tailwindEntry;
+      // Font weights are unitless — strip "px" if present (e.g. "700px" → "700")
+      const cleanVal = tailwindEntry.replace(/px$/, '');
+      twData.fontWeight[tokenName] = cleanVal;
       return;
     }
     if (subName === 'Family') {
@@ -435,7 +544,7 @@ function assignToTailwindData(twData: TwData, category: CategoryKey, subName: st
  * Construye el string final de CSS a partir de los datos organizados.
  */
 function composeCssOutput(
-    catsPerBlock: Record<string, CatsObj>, 
+    rootPerBlock: Record<string, FolderNode>, 
     blockMeta: Record<string, { collectionName: string; modeName: string; selector: string }>, 
     modesMap: Record<string, string[]>, 
     allCollections: VariableCollection[]
@@ -450,104 +559,192 @@ function composeCssOutput(
 
     for (const { col, modeId } of modePairs) {
         const blockKey = `${col.id}::${modeId}`;
-        const cats = catsPerBlock[blockKey];
-        if (!cats) continue;
+        const rootNode = rootPerBlock[blockKey];
+        if (!rootNode) continue;
         const meta = blockMeta[blockKey];
 
         cssChunks.push(`/* --- Collection: ${meta.collectionName} | Mode: ${meta.modeName} --- */`);
         cssChunks.push(`${meta.selector} {`);
         
-    const categoryOrder: CategoryKey[] = ["Colors", "Spacing", "Typography", "Other"];
-    for (const category of categoryOrder) {
-      const bucket = cats[category];
-      const subNames = Object.keys(bucket.subs).sort();
-      if (!subNames.length) continue;
-
-      cssChunks.push(`\n  /* ${category} */`);
-      for (const subName of subNames) {
-        cssChunks.push(`  /* ${subName} */`);
-        const groups = bucket.subs[subName].groups;
-        const groupNames = Object.keys(groups).sort();
-        for (const groupName of groupNames) {
-          if (groupName !== "__root__") cssChunks.push(`  /* ${groupName} */`);
-          const groupLines = groups[groupName];
-
-          // Helper: try parse numeric suffix (with small normalization for dashes)
-          const parseSuffix = (s: string): number | null => {
-            if (!s) return null;
-            const raw = String(s).trim();
-            const n = Number(raw);
-            if (!Number.isNaN(n)) return n;
-            // try replacing lone dashes with dots for patterns like '0-5' -> '0.5'
-            if (/^\d+-\d+$/.test(raw)) {
-              const alt = raw.replace('-', '.');
-              const a = Number(alt);
-              if (!Number.isNaN(a)) return a;
-            }
-            return null;
-          };
-
-          const numericCount = groupLines.reduce((acc: number, it: Line) => {
-            const last = (it.name || '').split('-').pop() || '';
-            return acc + (parseSuffix(last) !== null ? 1 : 0);
-          }, 0);
-          const totalCount = groupLines.length || 1;
-          const numericRatio = numericCount / totalCount;
-          const useNumeric = numericRatio >= 0.6; // threshold
-
-          const lines = groupLines.slice().sort((a: Line, b: Line) => {
-            if (!useNumeric) {
-              // Respect Figma order when hybrid decides not to use numeric sorting
-              const ao = (typeof a.order === 'number') ? a.order : Number.MAX_SAFE_INTEGER;
-              const bo = (typeof b.order === 'number') ? b.order : Number.MAX_SAFE_INTEGER;
-              if (ao !== bo) return ao - bo;
-              return a.name.localeCompare(b.name, undefined, { numeric: true });
-            }
-            // When numeric sorting is active: prefer numeric suffix descending
-            const aLast = (a.name || '').split('-').pop() || '';
-            const bLast = (b.name || '').split('-').pop() || '';
-            const aNum = parseSuffix(aLast);
-            const bNum = parseSuffix(bLast);
-            const aNumValid = aNum !== null;
-            const bNumValid = bNum !== null;
-            if (aNumValid && bNumValid) return (bNum as number) - (aNum as number);
-            if (aNumValid && !bNumValid) return -1;
-            if (bNumValid && !aNumValid) return 1;
-            // fallback to name compare
-            return a.name.localeCompare(b.name, undefined, { numeric: true });
-          });
-
-          lines.forEach((line: Line) => cssChunks.push(`    ${line.text}`));
-        }
-      }
-    }
+        cssChunks.push(...renderFolderNode(rootNode, 1, ''));
+        
         cssChunks.push("}\n");
     }
     return cssChunks.join("\n");
 }
 
+function renderFolderNode(node: FolderNode, level: number, parentLabel: string): string[] {
+    const chunks: string[] = [];
+    
+    const lines = node.lines.slice().sort((a, b) => {
+      const ra = getSortRank(a.name);
+      const rb = getSortRank(b.name);
+      if (ra.group === rb.group && ra.type !== 'other') {
+        return ra.val - rb.val;
+      }
+      return a.name.localeCompare(b.name, undefined, { numeric: true });
+    });
+
+    for (const l of lines) {
+      chunks.push(`  ${l.text}`);
+    }
+
+    const subNames = Object.keys(node.subFolders); 
+    for (const name of subNames) {
+      if (chunks.length > 0 && chunks[chunks.length - 1] !== "") chunks.push("");
+      
+      // Level 1: /* === Color === */
+      // Level 2: /* --- Success --- */
+      // Level 3+: /* Success Action */  (accumulates parent context)
+      let comment: string;
+      let nextLabel: string;
+      if (level === 1) {
+        comment = `/* === ${name} === */`;
+        nextLabel = '';
+      } else if (level === 2) {
+        comment = `/* --- ${name} --- */`;
+        nextLabel = name;
+      } else {
+        const fullLabel = parentLabel ? `${parentLabel} ${name}` : name;
+        comment = `/* ${fullLabel} */`;
+        nextLabel = fullLabel;
+      }
+      
+      chunks.push(`  ${comment}`);
+      chunks.push(...renderFolderNode(node.subFolders[name], level + 1, nextLabel));
+    }
+
+    while(chunks.length > 0 && chunks[chunks.length - 1] === "") {
+        chunks.pop();
+    }
+
+    return chunks;
+}
+
+function composeExcelOutput(
+    rootExcelBlock: Record<string, ExcelFolderNode>, 
+    blockMeta: Record<string, { collectionName: string; modeName: string; selector: string }>, 
+    modesMap: Record<string, string[]>, 
+    allCollections: VariableCollection[]
+): string {
+    const csvChunks: string[] = [];
+    csvChunks.push("Figma Path,Figma Value,Code Name,Code Value");
+    
+    // We reuse the mode logic
+    const modePairs = Object.keys(modesMap).reduce((acc: {col: VariableCollection, modeId: string}[], colId: string) => {
+        const col = allCollections.find(c => c.id === colId)!;
+        const pairs = modesMap[colId].map(modeId => ({ col, modeId }));
+        return acc.concat(pairs);
+    }, []);
+
+    for (const { col, modeId } of modePairs) {
+        const blockKey = `${col.id}::${modeId}`;
+        const rootNode = rootExcelBlock[blockKey];
+        if (!rootNode) continue;
+        const meta = blockMeta[blockKey];
+
+        // Section header
+        csvChunks.push(`\n"--- ${meta.collectionName} | ${meta.modeName} ---","","",""`);
+        
+        csvChunks.push(...renderExcelNode(rootNode));
+    }
+    return csvChunks.join("\n");
+}
+
+function renderExcelNode(node: ExcelFolderNode): string[] {
+    const chunks: string[] = [];
+    const lines = node.lines.slice().sort((a: ExcelLine, b: ExcelLine) => {
+      const ra = getSortRank(a.name);
+      const rb = getSortRank(b.name);
+      if (ra.group === rb.group && ra.type !== 'other') return ra.val - rb.val;
+      return a.name.localeCompare(b.name, undefined, { numeric: true });
+    });
+
+    for (const l of lines) {
+      chunks.push(`"${l.figmaPath}","${l.figmaValueString}","${l.codeSyntax}","${l.codeValue}"`);
+    }
+
+    const subNames = Object.keys(node.subFolders); 
+    for (const name of subNames) {
+      if (chunks.length > 0 && !chunks[chunks.length - 1].startsWith('\n')) chunks.push(`\n"${name}","","",""`);
+      else chunks.push(`"${name}","","",""`);
+      
+      chunks.push(...renderExcelNode(node.subFolders[name]));
+    }
+    
+    // Filter out trailing empty spaces if they occur inside recursive buildup
+    while(chunks.length > 0 && chunks[chunks.length - 1] === "") chunks.pop();
+    
+    return chunks;
+}
+
 /**
  * Construye el string final de configuración de Tailwind.
  */
-function composeTailwindOutput(twData: TwData): string {
+function composeTailwindOutput(
+    twData: TwData,
+    collectionMap: Record<string, string>,
+    collectionOrder: string[]
+): string {
     const sections: string[] = [];
-    if (Object.keys(twData.colors).length > 0) {
-    const colorFamilies = Object.keys(twData.colors).sort().map(family => {
-      const shades = Object.keys(twData.colors[family]).sort((a,b) => {
-        const na = Number(a);
-        const nb = Number(b);
-        const aIsNum = !Number.isNaN(na);
-        const bIsNum = !Number.isNaN(nb);
-        if (aIsNum && bIsNum) return na - nb;
-        if (aIsNum && !bIsNum) return -1;
-        if (!aIsNum && bIsNum) return 1;
+
+    // Sort helper
+    const sortFn = ([a]: [string, string], [b]: [string, string]) => {
+        const ra = getSortRank(a);
+        const rb = getSortRank(b);
+        if (ra.group === rb.group && ra.type !== 'other') return ra.val - rb.val;
         return a.localeCompare(b, undefined, { numeric: true });
-      }).map(shade => `          "${shade}": "${twData.colors[family][shade]}"`);
-      return `        "${family}": {\n${shades.join(',\n')}\n        }`;
-    });
-        sections.push(`      colors: {\n${colorFamilies.join(',\n')}\n      }`);
+    };
+
+    // Helper: get the collection a color family belongs to (use first shade's token name)
+    function getFamilyCollection(family: string): string {
+      // The token name in the collection map is the full token (e.g. "amber-50")
+      // Find ANY token that starts with this family
+      const firstShade = Object.keys(collectionMap).find(k => {
+        const fam = k.substring(0, k.lastIndexOf('-')) || k;
+        return fam === family;
+      });
+      return firstShade ? collectionMap[firstShade] : collectionOrder[0] || '';
     }
 
+    // --- COLORS ---
+    if (Object.keys(twData.colors).length > 0) {
+      const allFamilies = Object.keys(twData.colors);
+      
+      // Group families by collection, preserving collection order
+      const familiesByCollection: Record<string, string[]> = {};
+      for (const fam of allFamilies) {
+        const col = getFamilyCollection(fam);
+        if (!familiesByCollection[col]) familiesByCollection[col] = [];
+        familiesByCollection[col].push(fam);
+      }
+
+      const colorLines: string[] = [];
+      for (const colName of collectionOrder) {
+        const families = familiesByCollection[colName];
+        if (!families || families.length === 0) continue;
+        families.sort();
+        
+        if (colorLines.length > 0) {
+          colorLines.push(`\n        // --- ${colName} ---\n`);
+        }
+
+        for (const family of families) {
+          const shades = Object.keys(twData.colors[family]).sort((a,b) => {
+            const na = Number(a); const nb = Number(b);
+            const aIsNum = !Number.isNaN(na); const bIsNum = !Number.isNaN(nb);
+            if (aIsNum && bIsNum) return na - nb;
+            if (aIsNum && !bIsNum) return -1;
+            if (!aIsNum && bIsNum) return 1;
+            return a.localeCompare(b, undefined, { numeric: true });
+          }).map(shade => `          "${shade}": "${twData.colors[family][shade]}"`);
+          colorLines.push(`        "${family}": {\n${shades.join(',\n')}\n        }`);
+        }
+      }
+      sections.push(`      colors: {\n${colorLines.join(',\n')}\n      }`);
+    }
+
+    // --- SIMPLE MAPS (spacing, borderRadius, blur, etc.) ---
     const simpleMaps: {[key: string]: Record<string, string>} = {
         spacing: twData.spacing,
         borderRadius: twData.borderRadius,
@@ -557,15 +754,40 @@ function composeTailwindOutput(twData: TwData): string {
         letterSpacing: twData.letterSpacing,
         fontWeight: twData.fontWeight,
         fontFamily: twData.fontFamily,
+        blur: twData.blur,
+        opacity: twData.opacity,
+        boxShadow: twData.boxShadow,
+        strokeWidth: twData.strokeWidth,
     };
 
     for (const key in simpleMaps) {
         if (Object.prototype.hasOwnProperty.call(simpleMaps, key)) {
             const data = simpleMaps[key];
             if (Object.keys(data).length > 0) {
-                const sortedEntries = Object.keys(data).map(k => [k, data[k]]).sort(([a], [b]) => (a as string).localeCompare(b as string, undefined, { numeric: true }));
-                const lines = sortedEntries.map(([k, v]) => `        "${k}": "${v}"`);
-                sections.push(`      ${key}: {\n${lines.join(',\n')}\n      }`);
+                const allEntries = Object.keys(data).map(k => [k, data[k]] as [string, string]);
+                
+                // Group by collection, preserving collection order
+                const byCollection: Record<string, [string, string][]> = {};
+                for (const entry of allEntries) {
+                  const col = collectionMap[entry[0]] || collectionOrder[0] || '';
+                  if (!byCollection[col]) byCollection[col] = [];
+                  byCollection[col].push(entry);
+                }
+
+                const allLines: string[] = [];
+                for (const colName of collectionOrder) {
+                  const entries = byCollection[colName];
+                  if (!entries || entries.length === 0) continue;
+                  entries.sort(sortFn);
+                  
+                  if (allLines.length > 0) {
+                    allLines.push(`        // --- ${colName} ---`);
+                  }
+                  for (const [k, v] of entries) {
+                    allLines.push(`        "${k}": "${v}"`);
+                  }
+                }
+                sections.push(`      ${key}: {\n${allLines.join(',\n')}\n      }`);
             }
         }
     }
@@ -588,6 +810,21 @@ ${sections.join(',\n')}
 
 
 // --- HELPERS Y UTILIDADES VARIAS ---
+const SIZE_WEIGHTS: Record<string, number> = {
+  'none': 0, '2xs': 5, 'xs': 10, 'sm': 20, 'base': 30, 'default': 31, 'normal': 32,
+  'md': 40, 'lg': 50, 'xl': 60, '2xl': 70, '3xl': 80, '4xl': 90, '5xl': 100, '6xl': 110,
+  '7xl': 120, '8xl': 130, '9xl': 140, 'full': 999
+};
+
+function getSortRank(name: string) {
+  const parts = name.toLowerCase().split('-');
+  const last = parts[parts.length - 1];
+  if (SIZE_WEIGHTS[last] !== undefined) return { group: parts.slice(0, -1).join('-'), val: SIZE_WEIGHTS[last], type: 'size' as const };
+  const n = parseFloat(last);
+  if (!isNaN(n)) return { group: parts.slice(0, -1).join('-'), val: n, type: 'num' as const };
+  if (SIZE_WEIGHTS[name] !== undefined) return { group: '', val: SIZE_WEIGHTS[name], type: 'size' as const };
+  return { group: name, val: 0, type: 'other' as const };
+}
 
 /**
  * Convierte un string a formato kebab-case de forma segura.
@@ -602,7 +839,9 @@ function kebab(s: unknown): string {
  * Crea el nombre de una variable CSS (ej. --prefix-mi-token).
  */
 function toCssVar(name: string, pfx: string): string {
-  const n = pfx ? `${pfx}-${name}` : name;
+  // Remove any leading dashes first to prevent triple dashes
+  const clean = name.replace(/^-+/, "");
+  const n = pfx ? `${pfx}-${clean}` : clean;
   return `--${n}`;
 }
 
@@ -611,13 +850,14 @@ function toCssVar(name: string, pfx: string): string {
  */
 function makeTokenName(v: Variable, collectionName: string, nameMode: NameMode): string {
   if (nameMode === "code-syntax") {
-    const meta = v as VariableWithCodeSyntax;
-    // Try several possible metadata fields and ensure they're strings
-    const candidates = [meta.codeSyntax, meta.code_syntax, meta.codeName, meta.nameForCode, meta.nameForCodeSyntax];
-    for (const c of candidates) {
-      if (typeof c === 'string' && c.trim().length > 0) {
-        return kebab(c.replace(/^--+/, ""));
+    if (v.codeSyntax && v.codeSyntax["WEB"]) {
+      let cs = v.codeSyntax["WEB"];
+      if (cs.startsWith("var(") && cs.endsWith(")")) {
+        cs = cs.substring(4, cs.length - 1);
       }
+      // Remove ALL leading dashes rigorously
+      cs = cs.replace(/^-+/, "");
+      return cs;
     }
     const joined = getCleanedPathSegments(v, collectionName).join('-');
     return kebab(joined || v.name || '');
@@ -688,13 +928,13 @@ async function resolveAlias(options: { rawValue: VariableValue, modeId: string, 
 function ensureBlock(
     col: VariableCollection, 
     modeId: string, 
-    catsPerBlock: Record<string, CatsObj>, 
+    rootPerBlock: Record<string, FolderNode>, 
     blockMeta: Record<string, { collectionName: string; modeName: string; selector: string }>, 
     modesMap: Record<string, string[]>
 ) {
     const key = `${col.id}::${modeId}`;
-    if (catsPerBlock[key]) return key;
-    catsPerBlock[key] = { Colors: { subs: {} }, Spacing: { subs: {} }, Typography: { subs: {} }, Other: { subs: {} } };
+    if (rootPerBlock[key]) return key;
+    rootPerBlock[key] = createFolderNode();
     const modeName = col.modes.find(m => m.modeId === modeId)?.name || modeId;
     
     const totalModes = Object.keys(modesMap).reduce((acc, current) => acc + modesMap[current].length, 0);
@@ -704,12 +944,4 @@ function ensureBlock(
     return key;
 }
 
-/**
- * Obtiene (o crea) el array donde se debe insertar una nueva línea de CSS.
- */
-function getGroupArray(block: CatsObj, category: CategoryKey, subName: string, h3Group: string): {name: string, text: string}[] {
-    const catBucket = block[category];
-    const subBucket = catBucket.subs[subName] || (catBucket.subs[subName] = { groups: {} });
-    const groupKey = h3Group || "__root__";
-    return subBucket.groups[groupKey] || (subBucket.groups[groupKey] = []);
-}
+
