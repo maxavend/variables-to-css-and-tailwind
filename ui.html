@@ -295,6 +295,21 @@
             <span style="font-size: 14px; color: var(--text);">Append "px" to FLOAT variables</span>
           </label>
         </div>
+        <div class="form-group">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input id="userem" class="check" type="checkbox">
+            <span style="font-size: 14px; color: var(--text);">Use REM instead of PX (1rem = 16px)</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="colorformat" style="display: block; font-size: 14px; color: var(--text); margin-bottom: 4px;">Color Format</label>
+          <select id="colorformat" class="select" style="width: 100%;">
+            <option value="hex" selected>HEX (Default)</option>
+            <option value="rgb">RGB</option>
+            <option value="hsl">HSL</option>
+            <option value="oklch">OKLCH</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -514,6 +529,8 @@
         nameMode: getNameMode(),
         format: getFormats(),
         unitPxForFloat: $('#unitpx').checked,
+        useRem: $('#userem').checked,
+        colorFormat: $('#colorformat').value,
         prefix: $('#prefix').value.trim(),
         modesByCollection: getModesByCollection()
       };
