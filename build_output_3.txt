@@ -1,0 +1,18 @@
+
+> variables-to-css-and-tailwind@1.0.0 build
+> npx tsc code.ts --target es6 --module commonjs --outDir . --strict --lib es6 --skipLibCheck && vite build
+
+The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+src/components/ui/resizable.tsx (10:22): "PanelGroup" is not exported by "node_modules/react-resizable-panels/dist/react-resizable-panels.js", imported by "src/components/ui/resizable.tsx".
+src/components/ui/resizable.tsx (28:22): "PanelResizeHandle" is not exported by "node_modules/react-resizable-panels/dist/react-resizable-panels.js", imported by "src/components/ui/resizable.tsx".
+[32mÔ£ô[39m 1530 modules transformed.
+rendering chunks...
+[plugin vite:singlefile] 
+
+[plugin vite:singlefile] Inlining: ui.js
+[plugin vite:singlefile] Inlining: style-CxjTf3EL.css
+computing gzip size...
+[2mdist/[22m[32mindex.html  [39m[1m[2m323.96 kB[22m[1m[22m[2m Ôöé gzip: 98.05 kB[22m
+[32mÔ£ô built in 3.20s[39m

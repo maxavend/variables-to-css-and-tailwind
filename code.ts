@@ -1,9 +1,9 @@
-// =================================================================
-// code.ts (Final, Documentado y Optimizado)
-// =================================================================
+/// <reference types="@figma/plugin-typings" />
+// @ts-ignore
+declare const __html__: string;
 
 // Muestra la interfaz del plugin con el tamaño especificado
-figma.showUI(__html__, { width: 820, height: 900 });
+figma.showUI(__html__, { width: 900, height: 600 });
 
 // --- TIPOS GLOBALES Y ESTRUCTURAS DE DATOS ---
 
