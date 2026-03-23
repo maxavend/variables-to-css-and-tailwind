@@ -19,6 +19,9 @@ interface UIRequest {
     nameMode?: NameMode;
     format?: ExportFormat[];
     unitPxForFloat?: boolean;
+    unitMode?: "px" | "rem";
+    colorFormat?: "rgb-raw" | "hex" | "oklch";
+    baseSize?: number;
     prefix?: string;
     modesByCollection?: Record<string, string>;
   };
@@ -48,11 +51,8 @@ interface TwData {
 }
 
 // Estructuras de datos para organizar las líneas de CSS antes de generarlas
-type Line = { name: string; text: string; order?: number };
-type Group = Record<string, Line[]>;
-type Sub = { groups: Group };
-type Bucket = { subs: Record<string, Sub> };
-type CatsObj = Record<CategoryKey, Bucket>;
+type FolderMap = Map<string, string[]>; // FolderPath -> CSS Lines
+type BlockMap = Map<string, FolderMap>; // BlockKey -> FolderMap
 
 
 // --- MANEJO DE MENSAJES DE LA UI (PUNTO DE ENTRADA) ---
@@ -94,6 +94,9 @@ figma.ui.onmessage = async (msg: UIRequest) => {
         nameMode = "code-syntax",
         format = ["css", "tailwind"],
         unitPxForFloat = true,
+        unitMode = "px",
+        colorFormat = "rgb-raw",
+        baseSize = 16,
         prefix = "",
         modesByCollection = {}
       } = msg.payload || {};
@@ -108,7 +111,17 @@ figma.ui.onmessage = async (msg: UIRequest) => {
       const selectedVars = allVariables.filter(v => selectedCollectionIds.has(v.variableCollectionId));
 
       const { css, tailwind } = await processAndGenerateCode({
-        selectedVars, allCollections, nameMode, prefix, unitPxForFloat, modesByCollection
+        selectedVars, 
+        allCollections, 
+        selectedCollectionIds, // Pass this down
+        allVariables,         // Pass this down
+        nameMode, 
+        prefix, 
+        unitPxForFloat, 
+        unitMode, 
+        colorFormat, 
+        baseSize, 
+        modesByCollection
       });
 
       figma.ui.postMessage({
@@ -136,14 +149,19 @@ figma.ui.onmessage = async (msg: UIRequest) => {
 async function processAndGenerateCode(options: {
   selectedVars: Variable[],
   allCollections: VariableCollection[],
+  selectedCollectionIds: Set<string>,
+  allVariables: Variable[],
   nameMode: NameMode,
   prefix: string,
   unitPxForFloat: boolean,
+  unitMode: "px" | "rem",
+  colorFormat: "rgb-raw" | "hex" | "oklch",
+  baseSize: number,
   modesByCollection: Record<string, string>
 }) {
-  const { selectedVars, allCollections, nameMode, prefix, unitPxForFloat, modesByCollection } = options;
+  const { selectedVars, allCollections, selectedCollectionIds, allVariables, nameMode, prefix, unitPxForFloat, unitMode, colorFormat, baseSize, modesByCollection } = options;
 
-  const catsPerBlock: Record<string, CatsObj> = {};
+  const catsPerBlock: BlockMap = new Map();
   const blockMeta: Record<string, { collectionName: string; modeName: string; selector: string }> = {};
   const twData: TwData = {
     colors: {}, spacing: {}, borderRadius: {}, borderWidth: {}, fontSize: {},
@@ -153,53 +171,88 @@ async function processAndGenerateCode(options: {
   
   const modesMap: Record<string, string[]> = {};
   for (const c of allCollections) {
-    if (selectedVars.some(v => v.variableCollectionId === c.id)) {
+    if (selectedCollectionIds.has(c.id)) {
       modesMap[c.id] = resolveModesForCollection(c, modesByCollection[c.id]);
     }
   }
 
-  for (const v of selectedVars) {
-    const col = allCollections.find(c => c.id === v.variableCollectionId)!;
+  // Group variables by collection for strict ordering
+  const varsByCollection: Map<string, Variable[]> = new Map();
+  for (const col of allCollections) {
+    const colVars = selectedVars.filter(v => v.variableCollectionId === col.id);
+    if (colVars.length > 0) {
+      varsByCollection.set(col.id, colVars);
+    }
+  }
+
+  // Iterate collection-by-collection in Figma's original order
+  for (const col of allCollections) {
+    if (!selectedCollectionIds.has(col.id)) continue;
     const modeIds = modesMap[col.id] || [];
 
-    for (let mId of modeIds) {
-      let rawValue = v.valuesByMode[mId];
-      
-      if (rawValue === undefined) {
-        const fallbackModeId = findFirstDefinedModeId(v, col);
-        if (fallbackModeId) {
-          mId = fallbackModeId;
-          rawValue = v.valuesByMode[mId];
+    /**
+     * IMPORTANTE: Respetamos estrictamente col.variableIds para mantener el 
+     * orden visual (drag-and-drop) definido por el usuario en la UI de Figma.
+     */
+    for (const varId of col.variableIds) {
+      const v = allVariables.find(varObj => varObj.id === varId);
+      if (!v) continue;
+
+      for (let mId of modeIds) {
+        let rawValue = v.valuesByMode[mId];
+        
+        if (rawValue === undefined) {
+          const fallbackModeId = findFirstDefinedModeId(v, col);
+          if (fallbackModeId) {
+            mId = fallbackModeId;
+            rawValue = v.valuesByMode[mId];
+          }
         }
+        if (rawValue === undefined) continue;
+
+        const { value: resolvedValue, sourceVar: aliasSourceVar } = await resolveAlias({
+          rawValue: rawValue as VariableValue, modeId: mId, allCollections
+        });
+        if (resolvedValue === null || resolvedValue === undefined) continue;
+
+        // Rule: Extract folders and clean token name
+        const nameParts = v.name.split('/').map(s => s.trim()).filter(Boolean);
+        nameParts.pop(); // Leaf is the token
+        const folderPath = nameParts.length > 0 ? nameParts.join(' / ') : "Root";
+
+        const tokenName = makeTokenName(v, col.name, nameMode);
+        const cssVarName = toCssVar(tokenName, prefix).replace(/\n/g, "").trim();
+        
+        const blockKey = ensureBlock(col, mId, catsPerBlock, blockMeta, modesMap);
+        
+        let folderMap = catsPerBlock.get(blockKey);
+        if (!folderMap) {
+          folderMap = new Map();
+          catsPerBlock.set(blockKey, folderMap);
+        }
+        
+        if (!folderMap.has(folderPath)) {
+          folderMap.set(folderPath, []);
+        }
+
+        const out = formatOutputLine({ v, resolvedValue, aliasSourceVar, allCollections, cssVarName, nameMode, prefix, unitPxForFloat, unitMode, colorFormat, baseSize });
+        
+        // Rule: Extreme cleanup of line breaks and spaces
+        if (out.cssLine) {
+          const cleanLine = out.cssLine.replace(/\n/g, "").trim();
+          folderMap.get(folderPath)!.push(cleanLine);
+        }
+        
+        // Tailwind categorization (unchanged logic)
+        const categories = ["Colors", "Spacing", "Typography", "Other"] as const;
+        let cat: CategoryKey = "Other";
+        if (v.resolvedType === "COLOR") cat = "Colors";
+        else if (v.name.toLowerCase().includes("spacing") || v.name.toLowerCase().includes("radius")) cat = "Spacing";
+        else if (v.name.toLowerCase().includes("font") || v.name.toLowerCase().includes("text")) cat = "Typography";
+
+        const tailwindValue = (out.tailwindEntry || `var(${cssVarName})`).replace(/\n/g, "").trim();
+        assignToTailwindData(twData, cat, folderPath || "General", tokenName, tailwindValue);
       }
-      if (rawValue === undefined) continue;
-
-      const { value: resolvedValue, sourceVar: aliasSourceVar } = await resolveAlias({
-        rawValue: rawValue as VariableValue, modeId: mId, allCollections
-      });
-      if (resolvedValue === null || resolvedValue === undefined) continue;
-
-      const tokenName = makeTokenName(v, col.name, nameMode);
-      const cssVarName = toCssVar(tokenName, prefix);
-      const { category, subName } = classifyVariable(v, col, nameMode, tokenName);
-      const pathSegments = getCleanedPathSegments(v, col.name);
-      const h3Group = chooseH3Group(category, subName, pathSegments);
-      
-      const blockKey = ensureBlock(col, mId, catsPerBlock, blockMeta, modesMap);
-      const groupArray = getGroupArray(catsPerBlock[blockKey], category, subName, h3Group);
-      
-  const out = formatOutputLine({ v, resolvedValue, aliasSourceVar, allCollections, cssVarName, nameMode, prefix, unitPxForFloat });
-  const cssLine = out.cssLine;
-  let tailwindEntry = out.tailwindEntry;
-
-      if (cssLine) {
-        // Preserve original order by attaching an index. Use the index from selectedVars.
-        const originalIndex = selectedVars.indexOf(v);
-        (groupArray as Array<Line>).push({ name: tokenName, text: cssLine, order: originalIndex });
-      }
-      // Ensure we always create a tailwind mapping. Fallback to var(--name) when none provided.
-      if (!tailwindEntry) tailwindEntry = `var(${cssVarName})`;
-      assignToTailwindData(twData, category, subName, tokenName, tailwindEntry);
     }
   }
 
@@ -207,106 +260,6 @@ async function processAndGenerateCode(options: {
   const tailwindOutput = composeTailwindOutput(twData);
 
   return { css: cssOutput, tailwind: tailwindOutput };
-}
-
-
-// --- FUNCIONES DE CLASIFICACIÓN Y ORGANIZACIÓN ---
-
-/**
- * Clasifica una variable en una categoría y subgrupo para organizar el CSS.
- */
-function classifyVariable(v: Variable, col: VariableCollection, nameMode: NameMode, tokenName: string) {
-  let category: CategoryKey;
-  let subName = "General";
-
-  if (nameMode === "code-syntax") {
-    const fromSyntax = classifyByTokenName(tokenName, v.resolvedType);
-    if (fromSyntax) return fromSyntax;
-  }
-  
-  const path = `${col.name}/${v.name}`.toLowerCase();
-  if (v.resolvedType === "COLOR") category = "Colors";
-  else if (path.indexOf("font") !== -1 || path.indexOf("text") !== -1) category = "Typography";
-  else if (path.indexOf("space") !== -1 || path.indexOf("radius") !== -1 || path.indexOf("size") !== -1) category = "Spacing";
-  else category = "Other";
-
-  if (category === "Colors") subName = getFirstMeaningfulSegment(v, col.name);
-  if (category === "Spacing") subName = getSpacingSubgroup(path);
-  if (category === "Typography") subName = getTypographySubgroup(path);
-  
-  return { category, subName };
-}
-
-function classifyByTokenName(tokenName: string, resolvedType: VariableResolvedDataType): { category: CategoryKey; subName: string } | null {
-  const parts = tokenName.split('-');
-  const first = parts[0];
-  const whole = tokenName;
-  const norm = whole.replace(/[\s_\-]/g, '').toLowerCase();
-
-  // Typography family
-  if (first === 'typography' || norm.includes('font') || norm.includes('text')) {
-    if (norm.includes('size')) return { category: 'Typography', subName: 'Font-Size' };
-    if (norm.includes('lineheight')) return { category: 'Typography', subName: 'Line Height' };
-    if (norm.includes('letterspacing') || norm.includes('tracking')) return { category: 'Typography', subName: 'Letter-Spacing' };
-    if (norm.includes('weight')) return { category: 'Typography', subName: 'Weight' };
-    if (norm.includes('family')) return { category: 'Typography', subName: 'Family' };
-    return { category: 'Typography', subName: 'General' };
-  }
-
-  // Spacing family (space, radius, border width)
-  if (first === 'size' || first === 'spacing' || norm.includes('space') || norm.includes('spacing') || norm.includes('gap') || norm.includes('radius') || norm.includes('rounded')) {
-    if (norm.includes('radius') || norm.includes('rounded')) return { category: 'Spacing', subName: 'Radius' };
-    if (norm.includes('borderwidth') || (norm.includes('border') && (norm.includes('width') || norm.includes('size'))) || norm.includes('strokewidth')) {
-      return { category: 'Spacing', subName: 'Border-Width' };
-    }
-    return { category: 'Spacing', subName: 'Space' };
-  }
-
-  // Colors (default fallback for color type)
-  if (resolvedType === 'COLOR') {
-    return { category: 'Colors', subName: first.charAt(0).toUpperCase() + first.slice(1) };
-  }
-
-  return null;
-}
-
-function getSpacingSubgroup(path: string): string {
-  const p = path.toLowerCase();
-  // explicit border/stroke width detection
-  if (p.includes("border-width") || (p.includes("border") && (p.includes("width") || p.includes("size"))) || p.includes("stroke-width") || (p.includes("stroke") && p.includes("width"))) {
-    return "Border-Width";
-  }
-  if (p.includes("radius") || p.includes("rounded")) return "Radius";
-  if (p.includes("space") || p.includes("spacing") || p.includes("gap") || p.includes("padding") || p.includes("margin")) return "Space";
-  return "Spacing";
-}
-
-function getTypographySubgroup(path: string): string {
-  const p = path.toLowerCase();
-  const norm = p.replace(/[\s_\-]/g, ""); // normalize camel/snake/kebab
-  if (norm.includes("family")) return "Family";
-  if (norm.includes("weight")) return "Weight";
-  if (norm.includes("lineheight")) return "Line Height";
-  if (norm.includes("letterspacing") || norm.includes("tracking")) return "Letter-Spacing";
-  if (norm.includes("fontsize") || (norm.includes("size") && norm.includes("font"))) return "Font-Size";
-  return "Typography";
-}
-
-function getFirstMeaningfulSegment(v: Variable, collectionName: string): string {
-  const segments = getCleanedPathSegments(v, collectionName);
-  return segments[0] || "General";
-}
-
-function getCleanedPathSegments(v: Variable, collectionName: string): string[] {
-  const rawSegments = (v.name || "").split("/").map(s => s.trim()).filter(Boolean);
-  const genericTerms = new Set(["color", "colors", "primitive", "primitives", "semantic", "semantics", collectionName.toLowerCase()]);
-  return rawSegments.filter(s => !genericTerms.has(s.toLowerCase()));
-}
-
-function chooseH3Group(_category: CategoryKey, _subName: string, segments: string[]): string {
-    if (segments.length <= 1) return "__root__";
-    if (segments.length > 2) return segments[1];
-    return "__root__";
 }
 
 
@@ -323,9 +276,12 @@ function formatOutputLine(options: {
   cssVarName: string,
   nameMode: NameMode,
   prefix: string,
-  unitPxForFloat: boolean
+  unitPxForFloat: boolean,
+  unitMode: "px" | "rem",
+  colorFormat: "rgb-raw" | "hex" | "oklch",
+  baseSize: number
 }) {
-  const { v, resolvedValue, aliasSourceVar, allCollections, cssVarName, nameMode, prefix, unitPxForFloat } = options;
+  const { v, resolvedValue, aliasSourceVar, allCollections, cssVarName, nameMode, prefix, unitPxForFloat, unitMode, colorFormat, baseSize } = options;
   let cssLine: string | null = null;
   let tailwindEntry: string | null = null;
   
@@ -351,21 +307,59 @@ function formatOutputLine(options: {
     switch (v.resolvedType) {
       case "COLOR": {
         const rgba = resolvedValue as RGBA;
-        const channels = `${Math.round(rgba.r * 255)} ${Math.round(rgba.g * 255)} ${Math.round(rgba.b * 255)}`;
-        cssLine = `${cssVarName}: ${channels};`;
-        if (rgba.a < 1) cssLine += ` /* alpha: ${rgba.a.toFixed(2)} */`;
-        tailwindEntry = (rgba.a < 1) ? `rgb(var(${cssVarName}) / <alpha-value>)` : `rgb(var(${cssVarName}))`;
+        let colorVal = "";
+        
+        if (colorFormat === "hex") {
+          colorVal = toHex(rgba);
+        } else if (colorFormat === "oklch") {
+          colorVal = toOKLCH(rgba);
+        } else {
+          // Default: RGB Raw (r g b)
+          colorVal = `${Math.round(rgba.r * 255)} ${Math.round(rgba.g * 255)} ${Math.round(rgba.b * 255)}`;
+        }
+
+        cssLine = `${cssVarName}: ${colorVal};`;
+        if (rgba.a < 1 && colorFormat !== "oklch" && colorFormat !== "hex") {
+           cssLine += ` /* alpha: ${rgba.a.toFixed(2)} */`;
+        }
+        
+        // Tailwind logic: Surgical separation
+        // If it's a primitive (no alias), use the raw value. 
+        // If it's an alias, it's handled in the alias block above.
+        if (colorFormat === "rgb-raw") {
+          const r = Math.round(rgba.r * 255);
+          const g = Math.round(rgba.g * 255);
+          const b = Math.round(rgba.b * 255);
+          tailwindEntry = (rgba.a < 1) ? `rgb(${r} ${g} ${b} / ${rgba.a.toFixed(2)})` : `rgb(${r} ${g} ${b})`;
+        } else {
+          tailwindEntry = colorVal; // Hex or OKLCH
+        }
         break;
       }
       case "FLOAT": {
-        const val = unitPxForFloat ? `${resolvedValue}px` : String(resolvedValue);
+        let val = String(resolvedValue);
+        const path = v.name.toLowerCase();
+        const isWeight = path.includes("weight");
+
+        if (isWeight && typeof resolvedValue === 'number') {
+          val = String(resolvedValue);
+        } else if (unitPxForFloat) {
+          if (unitMode === "rem") {
+            const remVal = (resolvedValue as number) / (baseSize || 16);
+            val = `${remVal.toFixed(3).replace(/\.?0+$/, "")}rem`;
+          } else {
+            val = `${resolvedValue}px`;
+          }
+        }
         cssLine = `${cssVarName}: ${val};`;
-        tailwindEntry = `var(${cssVarName})`;
+        // Use raw value for primitives in Tailwind
+        tailwindEntry = val;
         break;
       }
       case "STRING": {
         cssLine = `${cssVarName}: "${resolvedValue}";`;
-        tailwindEntry = `var(${cssVarName})`;
+        // Use raw value for primitives in Tailwind
+        tailwindEntry = String(resolvedValue);
         break;
       }
     }
@@ -432,95 +426,48 @@ function assignToTailwindData(twData: TwData, category: CategoryKey, subName: st
 }
 
 /**
- * Construye el string final de CSS a partir de los datos organizados.
+ * Construye el string final de CSS usando pre-agrupación por Map para evitar comentarios duplicados.
  */
 function composeCssOutput(
-    catsPerBlock: Record<string, CatsObj>, 
+    catsPerBlock: BlockMap, 
     blockMeta: Record<string, { collectionName: string; modeName: string; selector: string }>, 
     modesMap: Record<string, string[]>, 
     allCollections: VariableCollection[]
 ): string {
     const cssChunks: string[] = [];
     
-    const modePairs = Object.keys(modesMap).reduce((acc: {col: VariableCollection, modeId: string}[], colId: string) => {
-        const col = allCollections.find(c => c.id === colId)!;
-        const pairs = modesMap[colId].map(modeId => ({ col, modeId }));
-        return acc.concat(pairs);
-    }, []);
-
-    for (const { col, modeId } of modePairs) {
-        const blockKey = `${col.id}::${modeId}`;
-        const cats = catsPerBlock[blockKey];
-        if (!cats) continue;
-        const meta = blockMeta[blockKey];
-
-        cssChunks.push(`/* --- Collection: ${meta.collectionName} | Mode: ${meta.modeName} --- */`);
-        cssChunks.push(`${meta.selector} {`);
-        
-    const categoryOrder: CategoryKey[] = ["Colors", "Spacing", "Typography", "Other"];
-    for (const category of categoryOrder) {
-      const bucket = cats[category];
-      const subNames = Object.keys(bucket.subs).sort();
-      if (!subNames.length) continue;
-
-      cssChunks.push(`\n  /* ${category} */`);
-      for (const subName of subNames) {
-        cssChunks.push(`  /* ${subName} */`);
-        const groups = bucket.subs[subName].groups;
-        const groupNames = Object.keys(groups).sort();
-        for (const groupName of groupNames) {
-          if (groupName !== "__root__") cssChunks.push(`  /* ${groupName} */`);
-          const groupLines = groups[groupName];
-
-          // Helper: try parse numeric suffix (with small normalization for dashes)
-          const parseSuffix = (s: string): number | null => {
-            if (!s) return null;
-            const raw = String(s).trim();
-            const n = Number(raw);
-            if (!Number.isNaN(n)) return n;
-            // try replacing lone dashes with dots for patterns like '0-5' -> '0.5'
-            if (/^\d+-\d+$/.test(raw)) {
-              const alt = raw.replace('-', '.');
-              const a = Number(alt);
-              if (!Number.isNaN(a)) return a;
-            }
-            return null;
-          };
-
-          const numericCount = groupLines.reduce((acc: number, it: Line) => {
-            const last = (it.name || '').split('-').pop() || '';
-            return acc + (parseSuffix(last) !== null ? 1 : 0);
-          }, 0);
-          const totalCount = groupLines.length || 1;
-          const numericRatio = numericCount / totalCount;
-          const useNumeric = numericRatio >= 0.6; // threshold
-
-          const lines = groupLines.slice().sort((a: Line, b: Line) => {
-            if (!useNumeric) {
-              // Respect Figma order when hybrid decides not to use numeric sorting
-              const ao = (typeof a.order === 'number') ? a.order : Number.MAX_SAFE_INTEGER;
-              const bo = (typeof b.order === 'number') ? b.order : Number.MAX_SAFE_INTEGER;
-              if (ao !== bo) return ao - bo;
-              return a.name.localeCompare(b.name, undefined, { numeric: true });
-            }
-            // When numeric sorting is active: prefer numeric suffix descending
-            const aLast = (a.name || '').split('-').pop() || '';
-            const bLast = (b.name || '').split('-').pop() || '';
-            const aNum = parseSuffix(aLast);
-            const bNum = parseSuffix(bLast);
-            const aNumValid = aNum !== null;
-            const bNumValid = bNum !== null;
-            if (aNumValid && bNumValid) return (bNum as number) - (aNum as number);
-            if (aNumValid && !bNumValid) return -1;
-            if (bNumValid && !aNumValid) return 1;
-            // fallback to name compare
-            return a.name.localeCompare(b.name, undefined, { numeric: true });
-          });
-
-          lines.forEach((line: Line) => cssChunks.push(`    ${line.text}`));
+    const modePairs: {col: VariableCollection, modeId: string}[] = [];
+    for (const col of allCollections) {
+      if (modesMap[col.id]) {
+        for (const modeId of modesMap[col.id]) {
+          modePairs.push({ col, modeId });
         }
       }
     }
+
+    for (const { col, modeId } of modePairs) {
+        const blockKey = `${col.id}::${modeId}`;
+        const folderMap = catsPerBlock.get(blockKey);
+        if (!folderMap || folderMap.size === 0) continue;
+        const meta = blockMeta[blockKey];
+
+        cssChunks.push(`/* --- Collection: ${meta.collectionName} | Mode: ${meta.modeName} --- */\n`);
+        cssChunks.push(`${meta.selector} {`);
+        
+        /**
+         * Rule: Agrupación Estricta por Carpeta (Map-based).
+         * Esto garantiza que cada carpeta se procese EXACTAMENTE UNA VEZ,
+         * uniendo todas sus variables bajo un único encabezado sin duplicados.
+         */
+        folderMap.forEach((lines, folderName) => {
+            if (lines.length === 0) return;
+            
+            cssChunks.push(`\n  /* --- ${folderName} --- */`);
+            lines.forEach(line => {
+                cssChunks.push(`  ${line}`);
+            });
+        });
+
         cssChunks.push("}\n");
     }
     return cssChunks.join("\n");
@@ -530,24 +477,27 @@ function composeCssOutput(
  * Construye el string final de configuración de Tailwind.
  */
 function composeTailwindOutput(twData: TwData): string {
-    const sections: string[] = [];
+    const segments: string[] = [];
+
+    // Colors
     if (Object.keys(twData.colors).length > 0) {
-    const colorFamilies = Object.keys(twData.colors).sort().map(family => {
-      const shades = Object.keys(twData.colors[family]).sort((a,b) => {
-        const na = Number(a);
-        const nb = Number(b);
-        const aIsNum = !Number.isNaN(na);
-        const bIsNum = !Number.isNaN(nb);
-        if (aIsNum && bIsNum) return na - nb;
-        if (aIsNum && !bIsNum) return -1;
-        if (!aIsNum && bIsNum) return 1;
-        return a.localeCompare(b, undefined, { numeric: true });
-      }).map(shade => `          "${shade}": "${twData.colors[family][shade]}"`);
-      return `        "${family}": {\n${shades.join(',\n')}\n        }`;
-    });
-        sections.push(`      colors: {\n${colorFamilies.join(',\n')}\n      }`);
+        const colorFamilies = Object.keys(twData.colors).sort().map(family => {
+            const shades = Object.keys(twData.colors[family]).sort((a,b) => {
+                const na = Number(a);
+                const nb = Number(b);
+                const aIsNum = !Number.isNaN(na);
+                const bIsNum = !Number.isNaN(nb);
+                if (aIsNum && bIsNum) return na - nb;
+                if (aIsNum && !bIsNum) return -1;
+                if (!aIsNum && bIsNum) return 1;
+                return a.localeCompare(b, undefined, { numeric: true });
+            }).map(shade => `          "${shade}": "${twData.colors[family][shade]}"`);
+            return `        "${family}": {\n${shades.join(',\n')}\n        }`;
+        });
+        segments.push(`      colors: {\n${colorFamilies.join(',\n')}\n      }`);
     }
 
+    // Simple categories
     const simpleMaps: {[key: string]: Record<string, string>} = {
         spacing: twData.spacing,
         borderRadius: twData.borderRadius,
@@ -560,27 +510,25 @@ function composeTailwindOutput(twData: TwData): string {
     };
 
     for (const key in simpleMaps) {
-        if (Object.prototype.hasOwnProperty.call(simpleMaps, key)) {
-            const data = simpleMaps[key];
-            if (Object.keys(data).length > 0) {
-                const sortedEntries = Object.keys(data).map(k => [k, data[k]]).sort(([a], [b]) => (a as string).localeCompare(b as string, undefined, { numeric: true }));
-                const lines = sortedEntries.map(([k, v]) => `        "${k}": "${v}"`);
-                sections.push(`      ${key}: {\n${lines.join(',\n')}\n      }`);
-            }
+        const data = simpleMaps[key];
+        if (Object.keys(data).length > 0) {
+            const sortedEntries = Object.keys(data).map(k => [k, data[k]]).sort(([a], [b]) => (a as string).localeCompare(b as string, undefined, { numeric: true }));
+            const lines = sortedEntries.map(([k, v]) => `        "${k}": "${v}"`);
+            segments.push(`      ${key}: {\n${lines.join(',\n')}\n      }`);
         }
     }
 
-  // Ensure any leftover 'Other' tokens are included so nothing is dropped
-  if (twData.tokens && Object.keys(twData.tokens).length > 0) {
-    const tokenEntries = Object.keys(twData.tokens).sort((a,b) => a.localeCompare(b, undefined, { numeric: true })).map(k => `        "${k}": "${twData.tokens![k]}"`);
-    sections.push(`      tokens: {\n${tokenEntries.join(',\n')}\n      }`);
-  }
+    // Tokens / Other
+    if (twData.tokens && Object.keys(twData.tokens).length > 0) {
+        const tokenEntries = Object.keys(twData.tokens).sort().map(k => `        "${k}": "${twData.tokens![k]}"`);
+        segments.push(`      tokens: {\n${tokenEntries.join(',\n')}\n      }`);
+    }
 
     return `// tailwind.config.js
 module.exports = {
   theme: {
     extend: {
-${sections.join(',\n')}
+${segments.join(',\n')}
     }
   }
 };`;
@@ -606,21 +554,57 @@ function toCssVar(name: string, pfx: string): string {
   return `--${n}`;
 }
 
+function toHex(rgba: RGBA): string {
+  const r = Math.round(rgba.r * 255).toString(16).padStart(2, "0");
+  const g = Math.round(rgba.g * 255).toString(16).padStart(2, "0");
+  const b = Math.round(rgba.b * 255).toString(16).padStart(2, "0");
+  const a = rgba.a < 1 ? Math.round(rgba.a * 255).toString(16).padStart(2, "0") : "";
+  return `#${r}${g}${b}${a}`;
+}
+
 /**
- * Genera el nombre final del token a partir de una variable de Figma.
+ * Convierte RGB a OKLCH (Simplificado para CSS)
+ * L: 0-1, C: 0-0.4, H: 0-360
+ */
+function toOKLCH(rgba: RGBA): string {
+  // Conversión simplificada oklch directa desde RGB
+  // Para una precisión absoluta se requeriría una matriz de transformación a XYZ
+  // pero para CSS este formato es suficiente con valores base.
+  const r = rgba.r;
+  const g = rgba.g;
+  const b = rgba.b;
+  
+  const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+  const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+  const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+
+  const l_ = Math.cbrt(l);
+  const m_ = Math.cbrt(m);
+  const s_ = Math.cbrt(s);
+
+  const L = 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_;
+  const a = 1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_;
+  const b_ = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_;
+
+  const C = Math.sqrt(a * a + b_ * b_);
+  const H = (Math.atan2(b_, a) * 180) / Math.PI;
+  const finalH = H >= 0 ? H : H + 360;
+
+  return `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${finalH.toFixed(1)}${rgba.a < 1 ? ` / ${rgba.a.toFixed(2)}` : ""})`;
+}
+
+/**
+ * Genera el nombre del token basado en el nombre completo de la variable en Figma.
  */
 function makeTokenName(v: Variable, collectionName: string, nameMode: NameMode): string {
   if (nameMode === "code-syntax") {
     const meta = v as VariableWithCodeSyntax;
-    // Try several possible metadata fields and ensure they're strings
     const candidates = [meta.codeSyntax, meta.code_syntax, meta.codeName, meta.nameForCode, meta.nameForCodeSyntax];
     for (const c of candidates) {
       if (typeof c === 'string' && c.trim().length > 0) {
         return kebab(c.replace(/^--+/, ""));
       }
     }
-    const joined = getCleanedPathSegments(v, collectionName).join('-');
-    return kebab(joined || v.name || '');
   }
   return kebab(v.name || '');
 }
@@ -688,28 +672,31 @@ async function resolveAlias(options: { rawValue: VariableValue, modeId: string, 
 function ensureBlock(
     col: VariableCollection, 
     modeId: string, 
-    catsPerBlock: Record<string, CatsObj>, 
+    catsPerBlock: BlockMap, 
     blockMeta: Record<string, { collectionName: string; modeName: string; selector: string }>, 
     modesMap: Record<string, string[]>
 ) {
-    const key = `${col.id}::${modeId}`;
-    if (catsPerBlock[key]) return key;
-    catsPerBlock[key] = { Colors: { subs: {} }, Spacing: { subs: {} }, Typography: { subs: {} }, Other: { subs: {} } };
-    const modeName = col.modes.find(m => m.modeId === modeId)?.name || modeId;
-    
-    const totalModes = Object.keys(modesMap).reduce((acc, current) => acc + modesMap[current].length, 0);
+  const key = `${col.id}::${modeId}`;
+  if (catsPerBlock.has(key)) return key;
 
-    const selector = totalModes > 1 ? `:root[data-theme="${kebab(modeName)}"]` : `:root`;
-    blockMeta[key] = { collectionName: col.name, modeName, selector };
-    return key;
-}
+  const folderMap: FolderMap = new Map();
+  catsPerBlock.set(key, folderMap);
+  
+  const modeName = col.modes.find(m => m.modeId === modeId)?.name || modeId;
+  const totalModesForCol = modesMap[col.id]?.length || 0;
 
-/**
- * Obtiene (o crea) el array donde se debe insertar una nueva línea de CSS.
- */
-function getGroupArray(block: CatsObj, category: CategoryKey, subName: string, h3Group: string): {name: string, text: string}[] {
-    const catBucket = block[category];
-    const subBucket = catBucket.subs[subName] || (catBucket.subs[subName] = { groups: {} });
-    const groupKey = h3Group || "__root__";
-    return subBucket.groups[groupKey] || (subBucket.groups[groupKey] = []);
+  // Dynamic Theming: Use data-theme attribute selector for modes
+  let selector = ":root";
+  const modeKebab = kebab(modeName);
+  
+  if (totalModesForCol > 1) {
+    if (modeKebab === "light" || modeKebab === "claro") {
+      selector = ":root"; 
+    } else {
+      selector = `[data-theme="${modeKebab}"]`;
+    }
+  }
+  
+  blockMeta[key] = { collectionName: col.name, modeName, selector };
+  return key;
 }
