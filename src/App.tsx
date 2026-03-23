@@ -57,12 +57,10 @@ export function App() {
   const [selectedCollections, setSelectedCollections] = useState<Set<string>>(new Set());
   const [modesByCollection, setModesByCollection] = useState<Record<string, Set<string>>>({});
   const [namingMode, setNamingMode] = useState<'code-syntax' | 'figma-name'>('code-syntax');
-  const [formats, setFormats] = useState<Set<'css' | 'tailwind'>>(new Set(['css', 'tailwind']));
   const [prefix, setPrefix] = useState('');
   const [unitPxForFloat, setUnitPxForFloat] = useState(true);
-  const [generatedCode, setGeneratedCode] = useState({ css: '', tailwind: '' });
+  const [generatedCode, setGeneratedCode] = useState({ css: '' });
   const [isGenerating, setIsGenerating] = useState(false);
-  const [activeTab, setActiveTab] = useState('css');
   const [unitMode, setUnitMode] = useState<'px' | 'rem'>('px');
   const [baseFontSize, setBaseFontSize] = useState(16);
   const [colorFormat, setColorFormat] = useState<'rgb-raw' | 'hex' | 'oklch'>('rgb-raw');
@@ -100,7 +98,7 @@ export function App() {
     const payload = {
       collectionIds: Array.from(selectedCollections),
       nameMode: namingMode,
-      format: Array.from(formats),
+      format: ['css'],
       unitPxForFloat,
       unitMode,
       colorFormat,
@@ -115,7 +113,7 @@ export function App() {
       }, {} as Record<string, string>)
     };
     window.parent.postMessage({ pluginMessage: { type: 'RUN', payload } }, '*');
-  }, [selectedCollections, namingMode, formats, unitPxForFloat, unitMode, colorFormat, baseFontSize, prefix, modesByCollection]);
+  }, [selectedCollections, namingMode, unitPxForFloat, unitMode, colorFormat, baseFontSize, prefix, modesByCollection]);
 
   // Debounced Auto-run
   useEffect(() => {
@@ -155,9 +153,14 @@ export function App() {
     }
     setModesByCollection({ ...modesByCollection, [colId]: nextModes });
     
+    // Auto-sync parent collection switch based on child modes
     if (nextModes.size > 0 && !selectedCollections.has(colId)) {
       const nextCols = new Set(selectedCollections);
       nextCols.add(colId);
+      setSelectedCollections(nextCols);
+    } else if (nextModes.size === 0 && selectedCollections.has(colId)) {
+      const nextCols = new Set(selectedCollections);
+      nextCols.delete(colId);
       setSelectedCollections(nextCols);
     }
   };
@@ -187,27 +190,12 @@ export function App() {
           }
           if (language === 'css') {
             const parts = line.split(':');
-            if (parts.length === 2) {
+            if (parts.length === 2 && line.includes(';')) {
               return (
                 <div key={i} className="flex flex-wrap">
-                  <span className="text-blue-400">{parts[0]}</span>
+                  <span className="text-blue-400">{parts[0].trim()}</span>
                   <span className="text-zinc-400">:</span>
-                  <span className="text-orange-300 ml-1">{parts[1]}</span>
-                </div>
-              );
-            }
-          } else {
-            if (line.includes('"')) {
-              const [key, val] = line.split(':');
-              return (
-                <div key={i}>
-                  <span className="text-purple-400">{key}</span>
-                  {val && (
-                    <>
-                      <span className="text-zinc-200">:</span>
-                      <span className="text-green-300">{val}</span>
-                    </>
-                  )}
+                  <span className="text-orange-300 ml-1">{parts[1].trim()}</span>
                 </div>
               );
             }
@@ -224,9 +212,9 @@ export function App() {
         <ResizablePanelGroup direction="horizontal" className="flex-1 w-full overflow-hidden">
           {/* Panel Izquierdo: Configuración */}
           <ResizablePanel defaultSize="32" minSize="28" maxSize="45" className="flex flex-col bg-zinc-100/50">
-            <ScrollArea className="flex-1">
-              {/* Padding: Block (24px) con Separación entre Cards (12px - space-y-3) */}
-              <div className="p-6 space-y-3 pb-24">
+            {/* Scroll container con padding estratégico */}
+            <div className="flex-1 custom-scroll-container">
+              <div className="p-6 pr-[10px] space-y-3 pb-24">
                 
                 {/* Colecciones */}
                 <div className="space-y-3">
@@ -298,7 +286,6 @@ export function App() {
                                     checked={modesByCollection[col.id]?.has(mode.modeId)}
                                     onCheckedChange={() => toggleMode(col.id, mode.modeId)}
                                     className="data-[state=checked]:bg-zinc-900"
-                                    disabled={!selectedCollections.has(col.id)}
                                   />
                                 </div>
                               ))}
@@ -348,16 +335,16 @@ export function App() {
                       {/* Color Format Selector */}
                       <div className="space-y-1.5">
                         <Label className="text-xs font-medium text-zinc-600 block leading-none">
-                          Formato de color
+                          {t('color_format')}
                         </Label>
                         <Select value={colorFormat} onValueChange={(v: any) => setColorFormat(v)}>
                           <SelectTrigger className="h-8 rounded-lg border-zinc-200 bg-zinc-50/50 text-xs font-medium focus:ring-zinc-900 focus:border-zinc-900 transition-all">
-                            <SelectValue placeholder="Seleccionar formato" />
+                            <SelectValue placeholder={t('select_format')} />
                           </SelectTrigger>
                           <SelectContent className="rounded-lg border-zinc-200 shadow-xl">
-                            <SelectItem value="rgb-raw" className="text-xs font-medium">RGB Raw</SelectItem>
-                            <SelectItem value="hex" className="text-xs font-medium">Hexadecimal</SelectItem>
-                            <SelectItem value="oklch" className="text-xs font-medium">OKLCH</SelectItem>
+                            <SelectItem value="rgb-raw" className="text-xs font-medium">{t('rgb_raw')}</SelectItem>
+                            <SelectItem value="hex" className="text-xs font-medium">{t('hex')}</SelectItem>
+                            <SelectItem value="oklch" className="text-xs font-medium">{t('oklch')}</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -367,7 +354,7 @@ export function App() {
                       {/* Unit Selector (px / rem) */}
                       <div className="flex items-center justify-between">
                         <Label className="text-xs font-medium text-zinc-600" htmlFor="append-unit">
-                          Append unit
+                          {t('append_unit')}
                         </Label>
                         <Switch 
                           size="sm"
@@ -387,18 +374,18 @@ export function App() {
                           >
                             <div className="flex items-center space-x-3 group cursor-pointer">
                               <RadioGroupItem size="sm" value="px" id="unit-px" className="border-zinc-300 text-zinc-900" />
-                              <Label htmlFor="unit-px" className="text-xs font-medium text-zinc-600 group-hover:text-zinc-900 cursor-pointer">Append to px</Label>
+                              <Label htmlFor="unit-px" className="text-xs font-medium text-zinc-600 group-hover:text-zinc-900 cursor-pointer">{t('unit_to_px')}</Label>
                             </div>
                             <div className="flex items-center space-x-3 group cursor-pointer">
                               <RadioGroupItem size="sm" value="rem" id="unit-rem" className="border-zinc-300 text-zinc-900" />
-                              <Label htmlFor="unit-rem" className="text-xs font-medium text-zinc-600 group-hover:text-zinc-900 cursor-pointer">Append to rem</Label>
+                              <Label htmlFor="unit-rem" className="text-xs font-medium text-zinc-600 group-hover:text-zinc-900 cursor-pointer">{t('unit_to_rem')}</Label>
                             </div>
                           </RadioGroup>
 
                           {unitMode === 'rem' && (
                             <div className="space-y-1.5 ml-1 pt-1 animate-in fade-in slide-in-from-left-1 duration-200">
                               <Label className="text-xs font-medium text-zinc-600 block leading-none" htmlFor="base-size">
-                                Base Font Size (px)
+                                {t('base_font_size')}
                               </Label>
                               <Input 
                                 type="number"
@@ -431,87 +418,63 @@ export function App() {
                   </div>
                 </div>
               </div>
-            </ScrollArea>
+            </div>
           </ResizablePanel>
 
           <ResizableHandle className="w-[1px] bg-zinc-200/50 hover:bg-zinc-400 transition-colors" />
 
-          <ResizablePanel defaultSize="68" className="flex flex-col bg-zinc-950 dark">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-              {/* Header Derecho - Simetría de 8px (p-2) */}
-              <div className="h-12 flex items-center justify-between px-3 border-b border-zinc-900 bg-zinc-950">
-                <div className="flex items-center">
-                  <TabsList className="bg-zinc-900 border border-zinc-800 h-8 p-1 rounded-lg">
-                    <TabsTrigger value="css" className="h-6 px-5 text-[10px] font-bold uppercase rounded-md data-[state=active]:bg-zinc-800 data-[state=active]:text-white text-zinc-500 transition-all">CSS</TabsTrigger>
-                    <TabsTrigger value="tailwind" className="h-6 px-5 text-[10px] font-bold uppercase rounded-md data-[state=active]:bg-zinc-800 data-[state=active]:text-white text-zinc-500 transition-all">Tailwind</TabsTrigger>
-                  </TabsList>
+          <ResizablePanel defaultSize="68" className="flex flex-col bg-zinc-950 dark overflow-hidden">
+            <div className="flex flex-col h-full">
+              {/* Header Derecho - Sticky/Fijo por estructura flex */}
+              <div className="h-12 flex-shrink-0 flex items-center justify-between px-3 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur-md z-10">
+                <div className="flex items-center space-x-2">
+                  <Terminal className="size-3.5 text-zinc-500" />
                 </div>
                 
                 <div className="flex items-center space-x-2">
                   <Button 
                     variant="secondary" 
                     size="sm" 
-                    className="h-8 px-3 font-bold text-[10px] uppercase bg-zinc-900 text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors border border-zinc-800"
+                    className="h-8 px-3 font-medium text-xs bg-zinc-900 text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors border border-zinc-800"
                     onClick={handleGenerate}
                     disabled={selectedCollections.size === 0 || isGenerating}
                   >
-                    <RefreshCcw className={cn("size-3.5 mr-2", isGenerating && "animate-spin")} />
+                    <RefreshCcw className={cn("size-3 mr-2", isGenerating && "animate-spin")} />
                     {t('force_regeneration')}
                   </Button>
 
                   <Button 
                     variant="secondary" 
                     size="sm" 
-                    className="h-8 px-4 font-bold text-[10px] uppercase bg-zinc-900 text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors border border-zinc-800"
-                    onClick={() => {
-                      if (activeTab === 'css') copyToClipboard(generatedCode.css, 'CSS');
-                      else copyToClipboard(generatedCode.tailwind, 'Tailwind');
-                    }}
+                    className="h-8 px-4 font-medium text-xs bg-zinc-100 text-zinc-900 hover:bg-zinc-200 rounded-lg transition-all"
+                    onClick={() => copyToClipboard(generatedCode.css, 'CSS')}
                   >
-                    <Copy className="size-3.5 mr-2" />
+                    <Copy className="size-3 mr-2" />
                     {t('copy_clipboard')}
                   </Button>
                 </div>
               </div>
 
-              <TabsContent value="css" className="flex-1 m-0 p-0 overflow-hidden outline-none h-full">
-                <ScrollArea className="h-full w-full">
-                  <div className="flex flex-col h-full">
-                    {selectedCollections.size === 0 ? (
-                      <div className="flex-1 flex flex-col items-center justify-center space-y-5 opacity-20 text-zinc-400 animate-in fade-in duration-700 h-full min-h-[400px]">
-                        <Terminal className="size-16 stroke-[0.8px]" />
-                        <div className="text-center">
-                          <p className="text-xs mt-2 font-medium">{t('waiting_selection')}</p>
-                        </div>
+              {/* Contenedor de Scroll Derecho */}
+              <div className="flex-1 custom-scroll-container overflow-hidden">
+                <div className="flex flex-col h-full">
+                  {selectedCollections.size === 0 ? (
+                    <div className="h-full w-full flex flex-col items-center justify-center space-y-5 opacity-20 text-zinc-400 animate-in fade-in duration-700">
+                      <Terminal className="size-16 stroke-[0.8px]" />
+                      <div className="text-center">
+                        <p className="text-xs mt-2 font-medium tracking-wide">
+                          {t('waiting_selection')}
+                        </p>
                       </div>
-                    ) : (
-                      <div className="flex-1 p-8 pb-32 animate-in fade-in slide-in-from-bottom-2 duration-300 select-text cursor-text">
-                        <HighlightCode code={generatedCode.css} language="css" />
-                      </div>
-                    )}
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-
-              <TabsContent value="tailwind" className="flex-1 m-0 p-0 overflow-hidden outline-none h-full">
-                <ScrollArea className="h-full w-full">
-                  <div className="flex flex-col h-full">
-                    {selectedCollections.size === 0 ? (
-                      <div className="flex-1 flex flex-col items-center justify-center space-y-5 opacity-20 text-zinc-400 animate-in fade-in duration-700 h-full min-h-[400px]">
-                        <Code2 className="size-16 stroke-[0.8px]" />
-                        <div className="text-center">
-                          <p className="text-xs mt-2 font-medium">{t('select_for_config')}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex-1 p-8 pb-32 animate-in fade-in slide-in-from-bottom-2 duration-300 select-text cursor-text">
-                        <HighlightCode code={generatedCode.tailwind} language="js" />
-                      </div>
-                    )}
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-            </Tabs>
+                    </div>
+                  ) : (
+                    <div className="p-8 pr-5 pb-32 animate-in fade-in slide-in-from-bottom-2 duration-300 select-text cursor-text">
+                      <HighlightCode code={generatedCode.css} language="css" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </ResizablePanel>
         </ResizablePanelGroup>
         

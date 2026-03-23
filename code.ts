@@ -2,16 +2,16 @@
 // @ts-ignore
 declare const __html__: string;
 
-// Muestra la interfaz del plugin con el tamaño especificado
+// Shows the plugin UI with the specified size
 figma.showUI(__html__, { width: 900, height: 600 });
 
-// --- TIPOS GLOBALES Y ESTRUCTURAS DE DATOS ---
+// --- GLOBAL TYPES AND DATA STRUCTURES ---
 
 type ExportFormat = "css" | "tailwind";
 type NameMode = "code-syntax" | "figma-name";
 type CategoryKey = "Colors" | "Spacing" | "Typography" | "Other";
 
-// Define la estructura del mensaje que la UI envía al plugin
+// Define the message structure sent from UI to plugin
 interface UIRequest {
   type: "INIT" | "RUN";
   payload?: {
@@ -27,7 +27,7 @@ interface UIRequest {
   };
 }
 
-// Extiende el tipo `Variable` para incluir posibles campos de sintaxis de código personalizados
+// Extends the `Variable` type to include potential custom code syntax fields
 type VariableWithCodeSyntax = Variable & Partial<{
   codeSyntax: string;
   code_syntax: string;
@@ -36,34 +36,24 @@ type VariableWithCodeSyntax = Variable & Partial<{
   nameForCodeSyntax: string;
 }>;
 
-// Estructura para organizar los datos que se enviarán a la configuración de Tailwind
-interface TwData {
-  colors: Record<string, Record<string, string>>;
-  spacing: Record<string, string>;
-  borderRadius: Record<string, string>;
-  borderWidth: Record<string, string>;
-  fontSize: Record<string, string>;
-  lineHeight: Record<string, string>;
-  letterSpacing: Record<string, string>;
-  fontWeight: Record<string, string>;
-  fontFamily: Record<string, string>;
-  tokens?: Record<string, string>;
-}
-
-// Estructuras de datos para organizar las líneas de CSS antes de generarlas
-type FolderMap = Map<string, string[]>; // FolderPath -> CSS Lines
-type BlockMap = Map<string, FolderMap>; // BlockKey -> FolderMap
+// Data structures to organize CSS lines with Double-Nested Grouping (Root > Subfolder)
+type BlockData = { 
+  rootOrder: string[], 
+  subFolderOrder: Map<string, string[]>, 
+  cssLinesByFolder: Map<string, string[]> 
+}; 
+type BlockMap = Map<string, BlockData>; // BlockKey -> BlockData (Mode/Collection)
 
 
-// --- MANEJO DE MENSAJES DE LA UI (PUNTO DE ENTRADA) ---
+// --- MESSAGE HANDLING FROM UI (ENTRY POINT) ---
 
 /**
- * Escucha y procesa los mensajes que llegan desde la UI (ui.html).
- * Este es el controlador principal del plugin.
+ * Listens for and processes messages coming from the UI (ui.html).
+ * This is the main controller of the plugin.
  */
 figma.ui.onmessage = async (msg: UIRequest) => {
-  // 1. Mensaje 'INIT': Se recibe al cargar el plugin.
-  // Su propósito es obtener los datos iniciales (colecciones, variables) y enviarlos a la UI.
+  // 1. 'INIT' message: Received when the plugin loads.
+  // Purpose is to get initial data (collections, variables) and send them to the UI.
   if (msg.type === "INIT") {
     try {
       const collections = await figma.variables.getLocalVariableCollectionsAsync();
@@ -79,14 +69,14 @@ figma.ui.onmessage = async (msg: UIRequest) => {
       figma.ui.postMessage({ type: "INIT_DATA", payload: packedData });
 
     } catch (e) {
-      console.error("Error en INIT:", e);
-      figma.notify("Error al cargar las colecciones.", { error: true });
+      console.error("Error in INIT:", e);
+      figma.notify("Error loading collections.", { error: true });
     }
     return;
   }
 
-  // 2. Mensaje 'RUN': Se recibe cuando el usuario hace clic en "Generate".
-  // Activa la lógica principal para procesar las variables y generar el código.
+  // 2. 'RUN' message: Received when the user clicks "Generate".
+  // Triggers the main logic to process variables and generate code.
   if (msg.type === "RUN") {
     try {
       const {
@@ -110,7 +100,7 @@ figma.ui.onmessage = async (msg: UIRequest) => {
       
       const selectedVars = allVariables.filter(v => selectedCollectionIds.has(v.variableCollectionId));
 
-      const { css, tailwind } = await processAndGenerateCode({
+      const { css } = await processAndGenerateCode({
         selectedVars, 
         allCollections, 
         selectedCollectionIds, // Pass this down
@@ -128,23 +118,22 @@ figma.ui.onmessage = async (msg: UIRequest) => {
         type: "RESULT",
         payload: {
           css: format.indexOf("css") !== -1 ? css : "",
-          tailwind: format.indexOf("tailwind") !== -1 ? tailwind : ""
         }
       });
 
     } catch (e) {
-      console.error("Error en RUN:", e);
-      figma.notify("Ocurrió un error al generar el código. Revisa la consola.", { error: true });
+      console.error("Error in RUN:", e);
+      figma.notify("An error occurred while generating the code. Check the console.", { error: true });
     }
   }
 };
 
 
-// --- LÓGICA DE PROCESAMIENTO PRINCIPAL ---
+// --- MAIN PROCESSING LOGIC ---
 
 /**
- * Orquesta todo el proceso de generación de código.
- * Itera sobre las variables seleccionadas y organiza la salida.
+ * Orchestrates the entire code generation process.
+ * Iterates over selected variables and organizes the output.
  */
 async function processAndGenerateCode(options: {
   selectedVars: Variable[],
@@ -163,11 +152,6 @@ async function processAndGenerateCode(options: {
 
   const catsPerBlock: BlockMap = new Map();
   const blockMeta: Record<string, { collectionName: string; modeName: string; selector: string }> = {};
-  const twData: TwData = {
-    colors: {}, spacing: {}, borderRadius: {}, borderWidth: {}, fontSize: {},
-  lineHeight: {}, letterSpacing: {}, fontWeight: {}, fontFamily: {},
-  tokens: {},
-  };
   
   const modesMap: Record<string, string[]> = {};
   for (const c of allCollections) {
@@ -176,24 +160,11 @@ async function processAndGenerateCode(options: {
     }
   }
 
-  // Group variables by collection for strict ordering
-  const varsByCollection: Map<string, Variable[]> = new Map();
-  for (const col of allCollections) {
-    const colVars = selectedVars.filter(v => v.variableCollectionId === col.id);
-    if (colVars.length > 0) {
-      varsByCollection.set(col.id, colVars);
-    }
-  }
-
   // Iterate collection-by-collection in Figma's original order
   for (const col of allCollections) {
     if (!selectedCollectionIds.has(col.id)) continue;
     const modeIds = modesMap[col.id] || [];
 
-    /**
-     * IMPORTANTE: Respetamos estrictamente col.variableIds para mantener el 
-     * orden visual (drag-and-drop) definido por el usuario en la UI de Figma.
-     */
     for (const varId of col.variableIds) {
       const v = allVariables.find(varObj => varObj.id === varId);
       if (!v) continue;
@@ -215,58 +186,55 @@ async function processAndGenerateCode(options: {
         });
         if (resolvedValue === null || resolvedValue === undefined) continue;
 
-        // Rule: Extract folders and clean token name
-        const nameParts = v.name.split('/').map(s => s.trim()).filter(Boolean);
-        nameParts.pop(); // Leaf is the token
-        const folderPath = nameParts.length > 0 ? nameParts.join(' / ') : "Root";
 
         const tokenName = makeTokenName(v, col.name, nameMode);
         const cssVarName = toCssVar(tokenName, prefix).replace(/\n/g, "").trim();
         
         const blockKey = ensureBlock(col, mId, catsPerBlock, blockMeta, modesMap);
-        
-        let folderMap = catsPerBlock.get(blockKey);
-        if (!folderMap) {
-          folderMap = new Map();
-          catsPerBlock.set(blockKey, folderMap);
-        }
-        
-        if (!folderMap.has(folderPath)) {
-          folderMap.set(folderPath, []);
-        }
+        const block = catsPerBlock.get(blockKey)!;
+
+        // 1. Path Identification (Root and Sub-folder)
+        const nameParts = v.name.split('/').map(s => s.trim()).filter(Boolean);
+        const rootCategory = nameParts.length > 0 ? nameParts[0] : "Root";
+        const folderPath = nameParts.length > 1 ? nameParts.slice(0, -1).join(' / ') : "Root";
 
         const out = formatOutputLine({ v, resolvedValue, aliasSourceVar, allCollections, cssVarName, nameMode, prefix, unitPxForFloat, unitMode, colorFormat, baseSize });
         
-        // Rule: Extreme cleanup of line breaks and spaces
         if (out.cssLine) {
           const cleanLine = out.cssLine.replace(/\n/g, "").trim();
-          folderMap.get(folderPath)!.push(cleanLine);
-        }
-        
-        // Tailwind categorization (unchanged logic)
-        const categories = ["Colors", "Spacing", "Typography", "Other"] as const;
-        let cat: CategoryKey = "Other";
-        if (v.resolvedType === "COLOR") cat = "Colors";
-        else if (v.name.toLowerCase().includes("spacing") || v.name.toLowerCase().includes("radius")) cat = "Spacing";
-        else if (v.name.toLowerCase().includes("font") || v.name.toLowerCase().includes("text")) cat = "Typography";
+          
+          // A. Register Root Category if new
+          if (!block.rootOrder.includes(rootCategory)) {
+            block.rootOrder.push(rootCategory);
+            block.subFolderOrder.set(rootCategory, []);
+          }
+          
+          // B. Register Sub-folder within its Root Category if new
+          const folderList = block.subFolderOrder.get(rootCategory)!;
+          if (!folderList.includes(folderPath)) {
+            folderList.push(folderPath);
+          }
 
-        const tailwindValue = (out.tailwindEntry || `var(${cssVarName})`).replace(/\n/g, "").trim();
-        assignToTailwindData(twData, cat, folderPath || "General", tokenName, tailwindValue);
+          // C. Save CSS line in its exact folder (Nested Grouping)
+          if (!block.cssLinesByFolder.has(folderPath)) {
+            block.cssLinesByFolder.set(folderPath, []);
+          }
+          block.cssLinesByFolder.get(folderPath)!.push(cleanLine);
+        }
       }
     }
   }
 
   const cssOutput = composeCssOutput(catsPerBlock, blockMeta, modesMap, allCollections);
-  const tailwindOutput = composeTailwindOutput(twData);
 
-  return { css: cssOutput, tailwind: tailwindOutput };
+  return { css: cssOutput };
 }
 
 
-// --- HELPERS DE FORMATO Y COMPOSICIÓN DE SALIDA ---
+// --- FORMAT AND COMPOSITION HELPERS ---
 
 /**
- * Formatea una única línea de CSS y una entrada para Tailwind a partir de una variable.
+ * Formats a single CSS line from a variable.
  */
 function formatOutputLine(options: {
   v: Variable,
@@ -283,56 +251,38 @@ function formatOutputLine(options: {
 }) {
   const { v, resolvedValue, aliasSourceVar, allCollections, cssVarName, nameMode, prefix, unitPxForFloat, unitMode, colorFormat, baseSize } = options;
   let cssLine: string | null = null;
-  let tailwindEntry: string | null = null;
   
   if (aliasSourceVar) {
     const srcCol = allCollections.find(c => c.id === aliasSourceVar.variableCollectionId)!;
     const srcTokenName = makeTokenName(aliasSourceVar, srcCol.name, nameMode);
     const srcCssVarName = toCssVar(srcTokenName, prefix);
     cssLine = `${cssVarName}: var(${srcCssVarName});`;
-    // Also create a Tailwind entry so aliases are mapped in the Tailwind output
-    if (aliasSourceVar.resolvedType === 'COLOR') {
-      // Use resolvedValue to determine if alpha is present
-      const aliasedVal = resolvedValue as RGBA | undefined;
-      if (aliasedVal && typeof aliasedVal === 'object' && aliasedVal.r !== undefined) {
-        tailwindEntry = (aliasedVal.a < 1) ? `rgb(var(${srcCssVarName}) / <alpha-value>)` : `rgb(var(${srcCssVarName}))`;
-      } else {
-        // fallback: assume opaque to avoid showing empty alpha
-        tailwindEntry = `rgb(var(${srcCssVarName}))`;
-      }
-    } else {
-      tailwindEntry = `var(${srcCssVarName})`;
-    }
   } else {
     switch (v.resolvedType) {
       case "COLOR": {
         const rgba = resolvedValue as RGBA;
         let colorVal = "";
         
+        const r = Math.round(rgba.r * 255);
+        const g = Math.round(rgba.g * 255);
+        const b = Math.round(rgba.b * 255);
+
         if (colorFormat === "hex") {
           colorVal = toHex(rgba);
         } else if (colorFormat === "oklch") {
           colorVal = toOKLCH(rgba);
         } else {
-          // Default: RGB Raw (r g b)
-          colorVal = `${Math.round(rgba.r * 255)} ${Math.round(rgba.g * 255)} ${Math.round(rgba.b * 255)}`;
+          // Default: RGB Wrapped for Tailwind V4
+          if (rgba.a < 1) {
+            colorVal = `rgb(${r} ${g} ${b} / ${rgba.a.toFixed(2)})`;
+          } else {
+            colorVal = `rgb(${r} ${g} ${b})`;
+          }
         }
 
         cssLine = `${cssVarName}: ${colorVal};`;
         if (rgba.a < 1 && colorFormat !== "oklch" && colorFormat !== "hex") {
            cssLine += ` /* alpha: ${rgba.a.toFixed(2)} */`;
-        }
-        
-        // Tailwind logic: Surgical separation
-        // If it's a primitive (no alias), use the raw value. 
-        // If it's an alias, it's handled in the alias block above.
-        if (colorFormat === "rgb-raw") {
-          const r = Math.round(rgba.r * 255);
-          const g = Math.round(rgba.g * 255);
-          const b = Math.round(rgba.b * 255);
-          tailwindEntry = (rgba.a < 1) ? `rgb(${r} ${g} ${b} / ${rgba.a.toFixed(2)})` : `rgb(${r} ${g} ${b})`;
-        } else {
-          tailwindEntry = colorVal; // Hex or OKLCH
         }
         break;
       }
@@ -352,81 +302,27 @@ function formatOutputLine(options: {
           }
         }
         cssLine = `${cssVarName}: ${val};`;
-        // Use raw value for primitives in Tailwind
-        tailwindEntry = val;
         break;
       }
       case "STRING": {
-        cssLine = `${cssVarName}: "${resolvedValue}";`;
-        // Use raw value for primitives in Tailwind
-        tailwindEntry = String(resolvedValue);
+        const val = String(resolvedValue);
+        const isFont = v.name.toLowerCase().includes('font') || v.name.toLowerCase().includes('family');
+        
+        if (isFont) {
+          cssLine = `${cssVarName}: "${val}", sans-serif;`;
+        } else {
+          cssLine = `${cssVarName}: "${val}";`;
+        }
         break;
       }
     }
   }
-  return { cssLine, tailwindEntry };
+  return { cssLine };
 }
 
 /**
- * Asigna una entrada de Tailwind a la categoría correcta dentro del objeto `twData`.
- */
-function assignToTailwindData(twData: TwData, category: CategoryKey, subName: string, tokenName: string, tailwindEntry: string) {
-  // Use the last segment ONLY for color shade scale (e.g., "primary-500").
-  // For all other maps, use the full token name to avoid collisions like "spacing-16" in multiple families.
-  const scaleKey = tokenName.split('-').pop() || tokenName;
-
-  if (category === 'Colors') {
-    const family = tokenName.substring(0, tokenName.lastIndexOf('-')) || tokenName;
-    if (!twData.colors[family]) twData.colors[family] = {};
-    twData.colors[family][scaleKey] = tailwindEntry;
-    return;
-  }
-
-  if (category === 'Spacing') {
-    if (subName === 'Space' || subName === 'Spacing') {
-      twData.spacing[tokenName] = tailwindEntry;
-      return;
-    }
-    if (subName === 'Radius' || subName === 'Rounded') {
-      twData.borderRadius[tokenName] = tailwindEntry;
-      return;
-    }
-    if (subName === 'Border-Width') {
-      twData.borderWidth[tokenName] = tailwindEntry;
-      return;
-    }
-  }
-
-  if (category === 'Typography') {
-    if (subName === 'Font-Size') {
-      twData.fontSize[tokenName] = tailwindEntry;
-      return;
-    }
-    if (subName === 'Line Height') {
-      twData.lineHeight[tokenName] = tailwindEntry;
-      return;
-    }
-    if (subName === 'Letter-Spacing') {
-      twData.letterSpacing[tokenName] = tailwindEntry;
-      return;
-    }
-    if (subName === 'Weight') {
-      twData.fontWeight[tokenName] = tailwindEntry;
-      return;
-    }
-    if (subName === 'Family') {
-      twData.fontFamily[tokenName] = tailwindEntry;
-      return;
-    }
-  }
-
-  // Fallback: don't drop unknowns
-  if (!twData.tokens) twData.tokens = {};
-  twData.tokens[tokenName] = tailwindEntry;
-}
-
-/**
- * Construye el string final de CSS usando pre-agrupación por Map para evitar comentarios duplicados.
+ * Composes the final CSS block by iterating through a double-nested flow
+ * to avoid fragmentation and ensure absolute cohesion.
  */
 function composeCssOutput(
     catsPerBlock: BlockMap, 
@@ -436,35 +332,26 @@ function composeCssOutput(
 ): string {
     const cssChunks: string[] = [];
     
-    const modePairs: {col: VariableCollection, modeId: string}[] = [];
-    for (const col of allCollections) {
-      if (modesMap[col.id]) {
-        for (const modeId of modesMap[col.id]) {
-          modePairs.push({ col, modeId });
-        }
-      }
-    }
-
-    for (const { col, modeId } of modePairs) {
-        const blockKey = `${col.id}::${modeId}`;
-        const folderMap = catsPerBlock.get(blockKey);
-        if (!folderMap || folderMap.size === 0) continue;
+    for (const [blockKey, data] of catsPerBlock.entries()) {
         const meta = blockMeta[blockKey];
+        if (data.rootOrder.length === 0) continue;
 
         cssChunks.push(`/* --- Collection: ${meta.collectionName} | Mode: ${meta.modeName} --- */\n`);
         cssChunks.push(`${meta.selector} {`);
         
-        /**
-         * Rule: Agrupación Estricta por Carpeta (Map-based).
-         * Esto garantiza que cada carpeta se procese EXACTAMENTE UNA VEZ,
-         * uniendo todas sus variables bajo un único encabezado sin duplicados.
-         */
-        folderMap.forEach((lines, folderName) => {
-            if (lines.length === 0) return;
+        // 1. Iterate by Root Category (Color, Spacing, etc)
+        data.rootOrder.forEach(rootCat => {
+            const folders = data.subFolderOrder.get(rootCat) || [];
             
-            cssChunks.push(`\n  /* --- ${folderName} --- */`);
-            lines.forEach(line => {
-                cssChunks.push(`  ${line}`);
+            // 2. Iterate by Sub-folder within each Category
+            folders.forEach(folderPath => {
+                const lines = data.cssLinesByFolder.get(folderPath) || [];
+                if (lines.length === 0) return;
+
+                cssChunks.push(`\n  /* --- ${folderPath} --- */`);
+                lines.forEach(line => {
+                    cssChunks.push(`  ${line}`);
+                });
             });
         });
 
@@ -473,85 +360,67 @@ function composeCssOutput(
     return cssChunks.join("\n");
 }
 
+
+// --- VARIOUS HELPERS AND UTILITIES ---
+
 /**
- * Construye el string final de configuración de Tailwind.
+ * Generates the token name strictly respecting Figma's Code Syntax (WEB/iOS/Android)
+ * or using an intelligent fallback from path segments.
  */
-function composeTailwindOutput(twData: TwData): string {
-    const segments: string[] = [];
-
-    // Colors
-    if (Object.keys(twData.colors).length > 0) {
-        const colorFamilies = Object.keys(twData.colors).sort().map(family => {
-            const shades = Object.keys(twData.colors[family]).sort((a,b) => {
-                const na = Number(a);
-                const nb = Number(b);
-                const aIsNum = !Number.isNaN(na);
-                const bIsNum = !Number.isNaN(nb);
-                if (aIsNum && bIsNum) return na - nb;
-                if (aIsNum && !bIsNum) return -1;
-                if (!aIsNum && bIsNum) return 1;
-                return a.localeCompare(b, undefined, { numeric: true });
-            }).map(shade => `          "${shade}": "${twData.colors[family][shade]}"`);
-            return `        "${family}": {\n${shades.join(',\n')}\n        }`;
-        });
-        segments.push(`      colors: {\n${colorFamilies.join(',\n')}\n      }`);
-    }
-
-    // Simple categories
-    const simpleMaps: {[key: string]: Record<string, string>} = {
-        spacing: twData.spacing,
-        borderRadius: twData.borderRadius,
-        borderWidth: twData.borderWidth,
-        fontSize: twData.fontSize,
-        lineHeight: twData.lineHeight,
-        letterSpacing: twData.letterSpacing,
-        fontWeight: twData.fontWeight,
-        fontFamily: twData.fontFamily,
-    };
-
-    for (const key in simpleMaps) {
-        const data = simpleMaps[key];
-        if (Object.keys(data).length > 0) {
-            const sortedEntries = Object.keys(data).map(k => [k, data[k]]).sort(([a], [b]) => (a as string).localeCompare(b as string, undefined, { numeric: true }));
-            const lines = sortedEntries.map(([k, v]) => `        "${k}": "${v}"`);
-            segments.push(`      ${key}: {\n${lines.join(',\n')}\n      }`);
+function makeTokenName(v: Variable, collectionName: string, nameMode: NameMode): string {
+  // 1. CODE SYNTAX MODE: Absolute priority to Figma's official field
+  if (nameMode === "code-syntax") {
+    const rawSyntax = v.codeSyntax;
+    if (rawSyntax && typeof rawSyntax === 'object') {
+      // We prioritize WEB, but accept any platform if it has content
+      const platforms = ["WEB", "ANDROID", "iOS"] as const;
+      for (const p of platforms) {
+        const val = (rawSyntax as any)[p];
+        if (typeof val === 'string' && val.trim().length > 0) {
+          return val.trim().replace(/^--+/, "");
         }
+      }
     }
 
-    // Tokens / Other
-    if (twData.tokens && Object.keys(twData.tokens).length > 0) {
-        const tokenEntries = Object.keys(twData.tokens).sort().map(k => `        "${k}": "${twData.tokens![k]}"`);
-        segments.push(`      tokens: {\n${tokenEntries.join(',\n')}\n      }`);
-    }
-
-    return `// tailwind.config.js
-module.exports = {
-  theme: {
-    extend: {
-${segments.join(',\n')}
+    // Fallbacks for old properties or metadata from other plugins
+    const meta = v as any;
+    const candidates = [meta.code_syntax, meta.codeName, meta.nameForCode, meta.nameForCodeSyntax];
+    for (const c of candidates) {
+      if (typeof c === 'string' && c.trim().length > 0) {
+        return c.trim().replace(/^--+/, "");
+      }
     }
   }
-};`;
+
+  // 2. LAYER NAME / FALLBACK MODE: Use Figma's path (Absolute Literal)
+  const parts = (v.name || '').split('/').map(s => s.trim()).filter(Boolean);
+  
+  // Use the full path joined by hyphens (no filters to avoid context loss)
+  return kebab(parts.join('-'));
 }
 
-
-// --- HELPERS Y UTILIDADES VARIAS ---
+/**
+ * Converts a token name into a CSS variable (--name).
+ * Ensures the -- prefix and handles the optional UI prefix.
+ */
+function toCssVar(name: string, prefix: string): string {
+  const n = prefix ? `${prefix}-${name}` : name;
+  // Only add -- at the beginning and clean duplicates
+  return `--${n.replace(/^--+/, "")}`;
+}
 
 /**
- * Convierte un string a formato kebab-case de forma segura.
+ * Converts a string or mixed value to kebab-case safe for CSS.
  */
 function kebab(s: unknown): string {
   const str = String(s || '').trim();
   if (!str) return '';
-  return str.replace(/[/\\]/g, "-").replace(/\s+/g, "-").replace(/[_]+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").replace(/--+/g, "-").toLowerCase();
-}
-
-/**
- * Crea el nombre de una variable CSS (ej. --prefix-mi-token).
- */
-function toCssVar(name: string, pfx: string): string {
-  const n = pfx ? `${pfx}-${name}` : name;
-  return `--${n}`;
+  return str
+    .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .replace(/[/\s_]+/g, "-")
+    .replace(/[^a-zA-Z0-9-]/g, "")
+    .replace(/--+/g, "-")
+    .toLowerCase();
 }
 
 function toHex(rgba: RGBA): string {
@@ -563,13 +432,13 @@ function toHex(rgba: RGBA): string {
 }
 
 /**
- * Convierte RGB a OKLCH (Simplificado para CSS)
+ * Converts RGB to OKLCH (Simplified for CSS)
  * L: 0-1, C: 0-0.4, H: 0-360
  */
 function toOKLCH(rgba: RGBA): string {
-  // Conversión simplificada oklch directa desde RGB
-  // Para una precisión absoluta se requeriría una matriz de transformación a XYZ
-  // pero para CSS este formato es suficiente con valores base.
+  // Simplified direct oklch conversion from RGB
+  // For absolute precision, a transformation matrix to XYZ would be required
+  // but for CSS this format is sufficient with base values.
   const r = rgba.r;
   const g = rgba.g;
   const b = rgba.b;
@@ -594,23 +463,7 @@ function toOKLCH(rgba: RGBA): string {
 }
 
 /**
- * Genera el nombre del token basado en el nombre completo de la variable en Figma.
- */
-function makeTokenName(v: Variable, collectionName: string, nameMode: NameMode): string {
-  if (nameMode === "code-syntax") {
-    const meta = v as VariableWithCodeSyntax;
-    const candidates = [meta.codeSyntax, meta.code_syntax, meta.codeName, meta.nameForCode, meta.nameForCodeSyntax];
-    for (const c of candidates) {
-      if (typeof c === 'string' && c.trim().length > 0) {
-        return kebab(c.replace(/^--+/, ""));
-      }
-    }
-  }
-  return kebab(v.name || '');
-}
-
-/**
- * Resuelve qué modos deben ser procesados para una colección.
+ * Resolves which modes should be processed for a collection.
  */
 function resolveModesForCollection(col: VariableCollection, requestedModes?: string): string[] {
   if (requestedModes) {
@@ -622,7 +475,7 @@ function resolveModesForCollection(col: VariableCollection, requestedModes?: str
 }
 
 /**
- * Encuentra el primer modo de una variable que tiene un valor definido.
+ * Finds the first mode of a variable that has a defined value.
  */
 function findFirstDefinedModeId(v: Variable, col: VariableCollection): string | null {
   for (const mode of col.modes) {
@@ -632,13 +485,13 @@ function findFirstDefinedModeId(v: Variable, col: VariableCollection): string | 
 }
 
 /**
- * Resuelve recursivamente una variable de tipo alias hasta encontrar un valor concreto.
- * Incluye una salvaguarda para evitar bucles infinitos.
+ * Recursively resolves an alias variable until a concrete value is found.
+ * Includes a safeguard to prevent infinite loops.
  */
 async function resolveAlias(options: { rawValue: VariableValue, modeId: string, allCollections: VariableCollection[], depth?: number }): Promise<{ value: VariableValue, sourceVar?: Variable }> {
   const { rawValue, modeId, allCollections, depth = 0 } = options;
   
-  // Salvaguarda contra bucles infinitos en alias
+  // Safeguard against infinite alias loops
   if (depth > 10) {
     console.error("Alias resolution depth exceeded. Check for circular references.");
     return { value: rawValue };
@@ -679,8 +532,11 @@ function ensureBlock(
   const key = `${col.id}::${modeId}`;
   if (catsPerBlock.has(key)) return key;
 
-  const folderMap: FolderMap = new Map();
-  catsPerBlock.set(key, folderMap);
+  catsPerBlock.set(key, { 
+    rootOrder: [], 
+    subFolderOrder: new Map(), 
+    cssLinesByFolder: new Map() 
+  });
   
   const modeName = col.modes.find(m => m.modeId === modeId)?.name || modeId;
   const totalModesForCol = modesMap[col.id]?.length || 0;

@@ -23,6 +23,15 @@ export const translations = {
     tailwind_config: "Tailwind Config",
     language: "Language",
     variables_count: "variables",
+    color_format: "Color Format",
+    select_format: "Select format",
+    rgb_raw: "RGB",
+    hex: "HEX",
+    oklch: "OKLCH",
+    append_unit: "Append unit",
+    unit_to_px: "Append to px",
+    unit_to_rem: "Append to rem",
+    base_font_size: "Base Font Size (px)",
   }
 };
 
