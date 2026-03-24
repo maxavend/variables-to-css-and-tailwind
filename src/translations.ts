@@ -20,7 +20,6 @@ export const translations = {
     force_regeneration: "Sync Variables",
     copy_clipboard: "Copy",
     css_variables: "CSS Variables",
-    tailwind_config: "Tailwind Config",
     language: "Language",
     variables_count: "variables",
     color_format: "Color Format",

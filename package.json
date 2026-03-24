@@ -1,7 +1,7 @@
 {
-  "name": "variables-to-css-and-tailwind",
+  "name": "variables-to-css",
   "version": "1.0.0",
-  "description": "Your Figma Plugin",
+  "description": "Figma plugin to export variables into developer-friendly CSS Custom Properties.",
   "main": "code.js",
   "scripts": {
     "dev": "vite",

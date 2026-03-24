@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Figma Plugin Mock Host</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            background-color: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+        }
+        #sidebar {
+            width: 300px;
+            background-color: #ffffff;
+            border-right: 1px solid #e5e5e5;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        #viewport {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            background-color: #e5e5e5;
+        }
+        #plugin-container {
+            width: 900px;
+            height: 600px;
+            background: white;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #d1d1d1;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        h1 { font-size: 18px; margin: 0; color: #333; }
+        p { font-size: 13px; color: #666; line-height: 1.5; }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background-color: #e0f2fe;
+            color: #0369a1;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h1>Figma Desktop</h1>
+        <p>Esta es una simulación del entorno de Figma para probar el plugin <b>Variables to CSS</b> con los nuevos colores Slate.</p>
+        <div class="badge">Modo Desarrollo</div>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 8px 0;">
+        <p style="font-size: 11px; font-style: italic;">El plugin a la derecha está cargando desde el servidor de desarrollo en tiempo real.</p>
+    </div>
+    <div id="viewport">
+        <div id="plugin-container">
+            <!-- Usando el puerto activo 5174 -->
+            <iframe src="http://localhost:5174" id="plugin-iframe"></iframe>
+        </div>
+    </div>
+
+    <script>
+        const iframe = document.getElementById('plugin-iframe');
+
+        // Mock Data
+        const mockCollections = [
+            {
+                id: 'col-1',
+                name: 'Brand Colors',
+                variableCount: 8,
+                modes: [{ modeId: 'm1', name: 'Brand' }]
+            },
+            {
+                id: 'col-2',
+                name: 'Internal UI Tokens',
+                variableCount: 42,
+                modes: [
+                    { modeId: 'm2-light', name: 'Light' },
+                    { modeId: 'm2-dark', name: 'Dark' }
+                ]
+            },
+            {
+                id: 'col-3',
+                name: 'Typography & Spacing',
+                variableCount: 15,
+                modes: [{ modeId: 'm3', name: 'Standard' }]
+            },
+            {
+                id: 'col-4',
+                name: 'Shadows & Effects',
+                variableCount: 6,
+                modes: [{ modeId: 'm4', name: 'Default' }]
+            }
+        ];
+
+        window.addEventListener('message', (event) => {
+            const msg = event.data.pluginMessage;
+            if (!msg) return;
+
+            console.log('Figma Host received:', msg);
+
+            if (msg.type === 'INIT') {
+                iframe.contentWindow.postMessage({
+                    pluginMessage: {
+                        type: 'INIT_DATA',
+                        payload: mockCollections
+                    }
+                }, '*');
+            }
+
+            if (msg.type === 'RUN') {
+                setTimeout(() => {
+                    const prefix = msg.payload.prefix || '';
+                    const css = `:root {
+  /* --- Brand Colors --- */
+  --${prefix}color-primary: #3b82f6;
+  --${prefix}color-primary-foreground: #ffffff;
+  --${prefix}color-secondary: #64748b;
+  --${prefix}color-accent: #f59e0b;
+
+  /* --- Typography --- */
+  --${prefix}font-sans: 'Inter', sans-serif;
+  --${prefix}text-xs: 0.75rem;
+  --${prefix}text-sm: 0.875rem;
+  --${prefix}text-base: 1rem;
+  --${prefix}font-bold: 700;
+
+  /* --- Spacing --- */
+  --${prefix}space-1: 4px;
+  --${prefix}space-2: 8px;
+  --${prefix}space-4: 16px;
+  --${prefix}space-8: 32px;
+
+  /* --- Effects --- */
+  --${prefix}shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --${prefix}shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --${prefix}radius-md: 8px;
+  --${prefix}radius-lg: 12px;
+}`;
+                    iframe.contentWindow.postMessage({
+                        pluginMessage: {
+                            type: 'RESULT',
+                            payload: { css }
+                        }
+                    }, '*');
+                }, 1000);
+            }
+        });
+    </script>
+</body>
+</html>

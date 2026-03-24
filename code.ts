@@ -7,7 +7,7 @@ figma.showUI(__html__, { width: 900, height: 600 });
 
 // --- GLOBAL TYPES AND DATA STRUCTURES ---
 
-type ExportFormat = "css" | "tailwind";
+type ExportFormat = "css";
 type NameMode = "code-syntax" | "figma-name";
 type CategoryKey = "Colors" | "Spacing" | "Typography" | "Other";
 
@@ -82,7 +82,7 @@ figma.ui.onmessage = async (msg: UIRequest) => {
       const {
         collectionIds = [],
         nameMode = "code-syntax",
-        format = ["css", "tailwind"],
+        format = ["css"],
         unitPxForFloat = true,
         unitMode = "px",
         colorFormat = "rgb-raw",
@@ -117,7 +117,7 @@ figma.ui.onmessage = async (msg: UIRequest) => {
       figma.ui.postMessage({
         type: "RESULT",
         payload: {
-          css: format.indexOf("css") !== -1 ? css : "",
+          css: css
         }
       });
 

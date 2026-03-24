@@ -179,14 +179,14 @@ export function App() {
   };
 
   const HighlightCode = ({ code, language }: { code: string, language: 'css' | 'js' }) => {
-    if (!code) return <span className="text-zinc-500 italic text-xs leading-relaxed">{t('waiting_variables')}</span>;
+    if (!code) return <span className="text-slate-400 italic text-xs leading-relaxed">{t('waiting_variables')}</span>;
 
     const lines = code.split('\n');
     return (
       <div className="font-mono text-xs leading-relaxed space-y-0.5">
         {lines.map((line, i) => {
           if (line.trim().startsWith('/*') || line.trim().startsWith('//')) {
-            return <div key={i} className="text-zinc-500">{line}</div>;
+            return <div key={i} className="text-slate-500">{line}</div>;
           }
           if (language === 'css') {
             const parts = line.split(':');
@@ -194,13 +194,13 @@ export function App() {
               return (
                 <div key={i} className="flex flex-wrap">
                   <span className="text-blue-400">{parts[0].trim()}</span>
-                  <span className="text-zinc-400">:</span>
+                  <span className="text-slate-400">:</span>
                   <span className="text-orange-300 ml-1">{parts[1].trim()}</span>
                 </div>
               );
             }
           }
-          return <div key={i} className="text-zinc-300">{line}</div>;
+          return <div key={i} className="text-slate-300">{line}</div>;
         })}
       </div>
     );
@@ -211,7 +211,7 @@ export function App() {
       <div id="app-root" className="figma-window select-none">
         <ResizablePanelGroup direction="horizontal" className="flex-1 w-full overflow-hidden">
           {/* Panel Izquierdo: Configuración */}
-          <ResizablePanel defaultSize="32" minSize="28" maxSize="45" className="flex flex-col bg-zinc-100/50">
+          <ResizablePanel defaultSize="32" minSize="28" maxSize="45" className="flex flex-col bg-slate-100/50">
             {/* Scroll container con padding estratégico */}
             <div className="flex-1 custom-scroll-container">
               <div className="p-6 pr-[10px] space-y-3 pb-24">
@@ -220,7 +220,7 @@ export function App() {
                 <div className="space-y-3">
                   {/* Título de Sección HOMOGENEO - Alineado al borde (px-0) */}
                   <div className="flex items-center px-0">
-                    <span className="text-xs font-medium text-zinc-600 leading-none">{t('collections_title')}</span>
+                    <span className="text-xs font-medium text-slate-600 leading-none">{t('collections_title')}</span>
                   </div>
                   {collections.length === 0 ? (
                     <div 
@@ -230,11 +230,11 @@ export function App() {
                         borderRadius: '12px'
                       }}
                     >
-                      <div className="size-10 rounded-full bg-white flex items-center justify-center border border-zinc-100 mb-4 shadow-sm">
-                        <Layers className="size-5 text-zinc-400" />
+                      <div className="size-10 rounded-full bg-white flex items-center justify-center border border-slate-200 mb-4 shadow-sm">
+                        <Layers className="size-5 text-slate-400" />
                       </div>
-                      <p className="text-xs text-zinc-600 font-medium text-center">{t('no_collections')}</p>
-                      <p className="text-xs text-zinc-500 mt-1 max-w-[170px] text-center leading-normal">{t('ensure_variables')}</p>
+                      <p className="text-xs text-slate-600 font-medium text-center">{t('no_collections')}</p>
+                      <p className="text-xs text-slate-500 mt-1 max-w-[170px] text-center leading-normal">{t('ensure_variables')}</p>
                     </div>
                   ) : (
                     <Accordion type="multiple" className="w-full gap-2 flex flex-col">
@@ -243,10 +243,10 @@ export function App() {
                           key={col.id} 
                           value={col.id} 
                           className={cn(
-                            "border border-zinc-200 rounded-xl p-0 transition-all duration-200 shadow-none overflow-hidden",
+                            "border border-slate-200 rounded-xl p-0 transition-all duration-200 shadow-none overflow-hidden",
                             selectedCollections.has(col.id) 
-                              ? "border-zinc-300 bg-white" 
-                              : "border-zinc-200 bg-white hover:border-zinc-300"
+                              ? "border-slate-300 bg-white" 
+                              : "border-slate-200 bg-white hover:border-slate-300"
                           )}
                         >
                           <div className="flex items-center px-3">
@@ -254,17 +254,17 @@ export function App() {
                               size="sm"
                               checked={selectedCollections.has(col.id)}
                               onCheckedChange={() => toggleCollection(col.id)}
-                              className="data-[state=checked]:bg-zinc-900 mr-3"
+                              className="data-[state=checked]:bg-slate-900 mr-3"
                             />
                             <AccordionTrigger className="hover:no-underline py-3.5 h-auto text-left flex-1 px-0 shadow-none border-none">
                               <div className="text-left">
                                 <div className={cn(
                                   "text-xs font-medium transition-colors leading-tight",
-                                  selectedCollections.has(col.id) ? "text-zinc-900" : "text-zinc-600"
+                                  selectedCollections.has(col.id) ? "text-slate-900" : "text-slate-600"
                                 )}>
                                   {col.name}
                                 </div>
-                                <div className="text-xs text-zinc-500 mt-1 font-medium leading-none">{col.variableCount} {t('variables_count')}</div>
+                                <div className="text-xs text-slate-500 mt-1 font-medium leading-none">{col.variableCount} {t('variables_count')}</div>
                               </div>
                             </AccordionTrigger>
                           </div>
@@ -275,7 +275,7 @@ export function App() {
                                   <Label 
                                     className={cn(
                                       "text-xs font-medium transition-colors cursor-pointer flex-1 py-1",
-                                      modesByCollection[col.id]?.has(mode.modeId) ? "text-zinc-900" : "text-zinc-600 group-hover/mode:text-zinc-800"
+                                      modesByCollection[col.id]?.has(mode.modeId) ? "text-slate-900" : "text-slate-600 group-hover/mode:text-slate-800"
                                     )}
                                     onClick={() => toggleMode(col.id, mode.modeId)}
                                   >
@@ -285,7 +285,7 @@ export function App() {
                                     size="sm"
                                     checked={modesByCollection[col.id]?.has(mode.modeId)}
                                     onCheckedChange={() => toggleMode(col.id, mode.modeId)}
-                                    className="data-[state=checked]:bg-zinc-900"
+                                    className="data-[state=checked]:bg-slate-900"
                                   />
                                 </div>
                               ))}
@@ -300,14 +300,14 @@ export function App() {
                 {/* Naming Logic */}
                 <div className="space-y-3">
                   <div className="flex items-center px-0 pt-3">
-                    <span className="text-xs font-medium text-zinc-600 leading-none">{t('naming_convention')}</span>
+                    <span className="text-xs font-medium text-slate-600 leading-none">{t('naming_convention')}</span>
                   </div>
 
                   {/* Card Padding: 12px (p-3) con ritmo de 12px (space-y-3) */}
-                  <div className="p-3 rounded-xl border border-zinc-200 bg-white shadow-none space-y-3">
+                  <div className="p-3 rounded-xl border border-slate-200 bg-white shadow-none space-y-3">
                     {/* Sección 1: Naming Strategy */}
                     <div className="space-y-3">
-                      <Label className="text-xs font-medium text-zinc-500 block leading-none">
+                      <Label className="text-xs font-medium text-slate-500 block leading-none">
                         {t('naming_convention')}
                       </Label>
                       {/* Gap Radio Items: 8px (space-y-2) */}
@@ -317,31 +317,31 @@ export function App() {
                         className="flex flex-col space-y-2"
                       >
                         <div className="flex items-center space-x-3 group cursor-pointer">
-                          <RadioGroupItem size="sm" value="code-syntax" id="syntax" className="border-zinc-300 text-zinc-900" />
-                          <Label htmlFor="syntax" className="text-xs font-medium text-zinc-600 group-hover:text-zinc-900 cursor-pointer">{t('naming_code_syntax')}</Label>
+                          <RadioGroupItem size="sm" value="code-syntax" id="syntax" className="border-slate-200 text-slate-900" />
+                          <Label htmlFor="syntax" className="text-xs font-medium text-slate-600 group-hover:text-slate-900 cursor-pointer">{t('naming_code_syntax')}</Label>
                         </div>
                         <div className="flex items-center space-x-3 group cursor-pointer">
-                          <RadioGroupItem size="sm" value="figma-name" id="figma" className="border-zinc-300 text-zinc-900" />
-                          <Label htmlFor="figma" className="text-xs font-medium text-zinc-600 group-hover:text-zinc-900 cursor-pointer">{t('naming_figma_name')}</Label>
+                          <RadioGroupItem size="sm" value="figma-name" id="figma" className="border-slate-200 text-slate-900" />
+                          <Label htmlFor="figma" className="text-xs font-medium text-slate-600 group-hover:text-slate-900 cursor-pointer">{t('naming_figma_name')}</Label>
                         </div>
                       </RadioGroup>
                     </div>
 
                     {/* Divider con 12px de gap (manejado por el padre space-y-3) */}
-                    <div className="h-[1px] w-full bg-zinc-100" />
+                    <div className="h-[1px] w-full bg-slate-200" />
 
                     {/* Sección 2: Unit / Color / Prefix */}
                     <div className="space-y-4">
                       {/* Color Format Selector */}
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-medium text-zinc-600 block leading-none">
+                        <Label className="text-xs font-medium text-slate-600 block leading-none">
                           {t('color_format')}
                         </Label>
                         <Select value={colorFormat} onValueChange={(v: any) => setColorFormat(v)}>
-                          <SelectTrigger className="h-8 rounded-lg border-zinc-200 bg-zinc-50/50 text-xs font-medium focus:ring-zinc-900 focus:border-zinc-900 transition-all">
+                          <SelectTrigger className="h-8 rounded-lg border-slate-200 bg-slate-50/50 text-xs font-medium focus:ring-slate-900 focus:border-slate-900 transition-all">
                             <SelectValue placeholder={t('select_format')} />
                           </SelectTrigger>
-                          <SelectContent className="rounded-lg border-zinc-200 shadow-xl">
+                          <SelectContent className="rounded-lg border-slate-200 shadow-xl">
                             <SelectItem value="rgb-raw" className="text-xs font-medium">{t('rgb_raw')}</SelectItem>
                             <SelectItem value="hex" className="text-xs font-medium">{t('hex')}</SelectItem>
                             <SelectItem value="oklch" className="text-xs font-medium">{t('oklch')}</SelectItem>
@@ -349,11 +349,11 @@ export function App() {
                         </Select>
                       </div>
 
-                      <div className="h-[1px] w-full bg-zinc-100" />
+                      <div className="h-[1px] w-full bg-slate-200" />
 
                       {/* Unit Selector (px / rem) */}
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs font-medium text-zinc-600" htmlFor="append-unit">
+                        <Label className="text-xs font-medium text-slate-600" htmlFor="append-unit">
                           {t('append_unit')}
                         </Label>
                         <Switch 
@@ -361,7 +361,7 @@ export function App() {
                           id="append-unit"
                           checked={unitPxForFloat}
                           onCheckedChange={setUnitPxForFloat}
-                          className="data-[state=checked]:bg-zinc-900"
+                          className="data-[state=checked]:bg-slate-900"
                         />
                       </div>
 
@@ -373,18 +373,18 @@ export function App() {
                             className="flex flex-col space-y-2 ml-1"
                           >
                             <div className="flex items-center space-x-3 group cursor-pointer">
-                              <RadioGroupItem size="sm" value="px" id="unit-px" className="border-zinc-300 text-zinc-900" />
-                              <Label htmlFor="unit-px" className="text-xs font-medium text-zinc-600 group-hover:text-zinc-900 cursor-pointer">{t('unit_to_px')}</Label>
+                              <RadioGroupItem size="sm" value="px" id="unit-px" className="border-slate-200 text-slate-900" />
+                              <Label htmlFor="unit-px" className="text-xs font-medium text-slate-600 group-hover:text-slate-900 cursor-pointer">{t('unit_to_px')}</Label>
                             </div>
                             <div className="flex items-center space-x-3 group cursor-pointer">
-                              <RadioGroupItem size="sm" value="rem" id="unit-rem" className="border-zinc-300 text-zinc-900" />
-                              <Label htmlFor="unit-rem" className="text-xs font-medium text-zinc-600 group-hover:text-zinc-900 cursor-pointer">{t('unit_to_rem')}</Label>
+                              <RadioGroupItem size="sm" value="rem" id="unit-rem" className="border-slate-200 text-slate-900" />
+                              <Label htmlFor="unit-rem" className="text-xs font-medium text-slate-600 group-hover:text-slate-900 cursor-pointer">{t('unit_to_rem')}</Label>
                             </div>
                           </RadioGroup>
 
                           {unitMode === 'rem' && (
                             <div className="space-y-1.5 ml-1 pt-1 animate-in fade-in slide-in-from-left-1 duration-200">
-                              <Label className="text-xs font-medium text-zinc-600 block leading-none" htmlFor="base-size">
+                              <Label className="text-xs font-medium text-slate-600 block leading-none" htmlFor="base-size">
                                 {t('base_font_size')}
                               </Label>
                               <Input 
@@ -393,7 +393,7 @@ export function App() {
                                 id="base-size"
                                 value={baseFontSize}
                                 onChange={(e) => setBaseFontSize(Number(e.target.value))}
-                                className="rounded-lg border-zinc-200 bg-zinc-50/50 focus-visible:ring-zinc-900 focus-visible:border-zinc-900 transition-all font-medium"
+                                className="rounded-lg border-slate-200 bg-slate-50/50 focus-visible:ring-slate-900 focus-visible:border-slate-900 transition-all font-medium"
                               />
                             </div>
                           )}
@@ -402,7 +402,7 @@ export function App() {
                       
                       {/* Unit / Prefix Field Group */}
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-medium text-zinc-600 block leading-none" htmlFor="prefix">
+                        <Label className="text-xs font-medium text-slate-600 block leading-none" htmlFor="prefix">
                           {t('prefix_label')}
                         </Label>
                         <Input 
@@ -411,7 +411,7 @@ export function App() {
                           placeholder={t('prefix_placeholder')} // e.g. "ds-"
                           value={prefix}
                           onChange={(e) => setPrefix(e.target.value)}
-                          className="rounded-lg border-zinc-200 bg-zinc-50/50 focus-visible:ring-zinc-900 focus-visible:border-zinc-900 transition-all font-medium placeholder:text-zinc-500 placeholder:font-medium"
+                          className="rounded-lg border-slate-200 bg-slate-50/50 focus-visible:ring-slate-900 focus-visible:border-slate-900 transition-all font-medium placeholder:text-slate-500 placeholder:font-medium"
                         />
                       </div>
                     </div>
@@ -421,21 +421,21 @@ export function App() {
             </div>
           </ResizablePanel>
 
-          <ResizableHandle className="w-[1px] bg-zinc-200/50 hover:bg-zinc-400 transition-colors" />
+          <ResizableHandle className="w-[1px] bg-slate-200/50 hover:bg-slate-400 transition-colors" />
 
-          <ResizablePanel defaultSize="68" className="flex flex-col bg-zinc-950 dark overflow-hidden">
+          <ResizablePanel defaultSize="68" className="flex flex-col bg-slate-950 dark overflow-hidden">
             <div className="flex flex-col h-full">
               {/* Header Derecho - Sticky/Fijo por estructura flex */}
-              <div className="h-12 flex-shrink-0 flex items-center justify-between px-3 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur-md z-10">
+              <div className="h-12 flex-shrink-0 flex items-center justify-between px-3 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md z-10">
                 <div className="flex items-center space-x-2">
-                  <Terminal className="size-3.5 text-zinc-500" />
+                  <Terminal className="size-3.5 text-slate-500" />
                 </div>
                 
                 <div className="flex items-center space-x-2">
                   <Button 
                     variant="secondary" 
                     size="sm" 
-                    className="h-8 px-3 font-medium text-xs bg-zinc-900 text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors border border-zinc-800"
+                    className="h-8 px-3 font-medium text-xs bg-slate-900 text-slate-100 hover:bg-slate-800 rounded-lg transition-colors border border-slate-800"
                     onClick={handleGenerate}
                     disabled={selectedCollections.size === 0 || isGenerating}
                   >
@@ -446,7 +446,7 @@ export function App() {
                   <Button 
                     variant="secondary" 
                     size="sm" 
-                    className="h-8 px-4 font-medium text-xs bg-zinc-100 text-zinc-900 hover:bg-zinc-200 rounded-lg transition-all"
+                    className="h-8 px-4 font-medium text-xs bg-slate-100 text-slate-900 hover:bg-slate-200 rounded-lg transition-all"
                     onClick={() => copyToClipboard(generatedCode.css, 'CSS')}
                   >
                     <Copy className="size-3 mr-2" />
@@ -459,8 +459,8 @@ export function App() {
               <div className="flex-1 custom-scroll-container overflow-hidden">
                 <div className="flex flex-col h-full">
                   {selectedCollections.size === 0 ? (
-                    <div className="h-full w-full flex flex-col items-center justify-center space-y-5 opacity-20 text-zinc-400 animate-in fade-in duration-700">
-                      <Terminal className="size-16 stroke-[0.8px]" />
+                    <div className="h-full w-full flex flex-col items-center justify-center space-y-5 text-slate-400 animate-in fade-in duration-700">
+                      <Terminal className="size-16 stroke-[0.8px] opacity-40" />
                       <div className="text-center">
                         <p className="text-xs mt-2 font-medium tracking-wide">
                           {t('waiting_selection')}

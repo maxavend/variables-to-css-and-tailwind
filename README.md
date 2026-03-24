@@ -1,6 +1,6 @@
-# Variables to CSS and Tailwind
+# Variables to CSS
 
-Este repositorio contiene un plugin de Figma que extrae variables de diseño (tokens/estilos) y las exporta a formatos útiles para desarrolladores: CSS custom properties y configuraciones compatibles con Tailwind.
+Este repositorio contiene un plugin de Figma especializado en extraer variables de diseño y exportarlas directamente a CSS custom properties.
 
 ## Contenido del repositorio
 
@@ -10,15 +10,7 @@ Este repositorio contiene un plugin de Figma que extrae variables de diseño (to
 - `package.json` — Scripts y dependencias del proyecto.
 - `tsconfig.json` — Configuración de TypeScript (si aplica).
 
-## Descripción
-
-El plugin permite extraer tokens de diseño (colores, tipografías, tamaños, sombras, espaciados, etc.) desde un archivo de Figma y convertirlos en:
-
-- CSS custom properties (ej. `--color-primary-500`).
-- Bloques o snippets recomendados para integrar en `tailwind.config.js`.
-- JSON plano para integración con otros sistemas (Style Dictionary, tokens management, etc.).
-
-Está pensado para acelerar el flujo entre diseñadores y desarrolladores y mantener la coherencia del diseño en el código.
+El plugin permite convertir tus variables de Figma (colores, espaciados, tipografías, etc.) en un bloque de código CSS organizado con comentarios.
 
 ## Requisitos
 
@@ -51,34 +43,11 @@ npm run dev
 
 4. Ejecuta el plugin desde Figma en un archivo que contenga estilos y tokens.
 
-## Uso básico
-
-1. Selecciona el plugin en Figma y ábrelo.
-2. En la UI, elige qué tipos de tokens deseas exportar (colores, tipografías, espaciados, etc.).
-3. Elige el formato de salida: CSS, Tailwind o JSON.
-4. Copia el resultado o descárgalo según la opción disponible.
-
-### Ejemplo de salida CSS
+### Ejemplo de salida
 
 ```css
 :root {
-  --primary-500: #1f7ae0;
-  --secondary-300: #f3c677;
-}
-```
-
-### Ejemplo (sugerencia) para `tailwind.config.js`
-
-```js
-module.exports = {
-  theme: {
-    extend: {
-      colors: {
-        primary: {
-          500: '#1f7ae0'
-        }
-      }
-    }
-  }
+  /* --- Brand / Primary --- */
+  --primary-500: rgb(31 122 224);
 }
 ```
