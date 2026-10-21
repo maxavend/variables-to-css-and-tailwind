@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Variables to CSS and Tailwind</title>
+  <script type="module" src="./main.js"></script>
+</head>
+<body>
+  <main class="panel">
+    <!-- Collections: filled from INIT_DATA -->
+    <section class="section" aria-labelledby="collections-title">
+      <fig-header borderless>
+        <h3 id="collections-title">Collections</h3>
+        <span id="collections-summary" class="header-meta" aria-live="polite"></span>
+      </fig-header>
+      <div id="collections" class="collections" role="group" aria-labelledby="collections-title" aria-busy="true">
+        <div class="empty"><fig-spinner aria-label="Loading collections"></fig-spinner></div>
+      </div>
+    </section>
+
+    <!-- Export options -->
+    <section class="section" aria-labelledby="export-title">
+      <fig-header borderless>
+        <h3 id="export-title">Export</h3>
+      </fig-header>
+      <fig-field direction="horizontal" columns="thirds">
+        <label id="names-label">Names</label>
+        <fig-segmented-control id="name-mode" value="code-syntax" aria-labelledby="names-label">
+          <fig-segment value="code-syntax" selected="true">Code syntax</fig-segment>
+          <fig-segment value="figma-name">Figma name</fig-segment>
+        </fig-segmented-control>
+      </fig-field>
+      <fig-field direction="horizontal" columns="thirds">
+        <label id="formats-label">Formats</label>
+        <div class="inline-checks" role="group" aria-labelledby="formats-label">
+          <fig-checkbox id="fmt-css" value="css" label="CSS" checked></fig-checkbox>
+          <fig-checkbox id="fmt-tw" value="tailwind" label="Tailwind" checked></fig-checkbox>
+        </div>
+      </fig-field>
+      <fig-switch id="unit-px" label="Add px to numbers" checked></fig-switch>
+      <p id="form-error" class="error" role="alert" hidden></p>
+    </section>
+
+    <!-- Optional section: Figma's +/− pattern -->
+    <section class="section" aria-labelledby="prefix-title">
+      <fig-header borderless>
+        <h3 id="prefix-title">Prefix</h3>
+        <fig-button id="prefix-toggle" variant="ghost" icon aria-label="Add prefix" aria-expanded="false" aria-controls="prefix-body">
+          <fig-icon name="add"></fig-icon>
+        </fig-button>
+      </fig-header>
+      <div id="prefix-body" class="section-body" hidden>
+        <fig-input-text id="prefix" placeholder="ds" aria-label="Prefix" full></fig-input-text>
+        <p id="prefix-hint" class="hint" aria-live="polite">Variables start with <code id="prefix-preview">--ds-</code></p>
+      </div>
+    </section>
+
+    <!-- Output -->
+    <section class="section section-output" aria-labelledby="output-title">
+      <fig-header borderless>
+        <h3 id="output-title">Output</h3>
+      </fig-header>
+      <fig-tabs id="output-tabs" value="css" overflow="fade">
+        <fig-tab value="css" content="#panel-css" selected="true">CSS</fig-tab>
+        <fig-tab value="tailwind" content="#panel-tailwind">Tailwind</fig-tab>
+      </fig-tabs>
+      <div id="panel-css" class="output-panel">
+        <textarea id="out-css" class="code" readonly spellcheck="false" aria-label="CSS output" placeholder="Select collections and click Generate"></textarea>
+      </div>
+      <div id="panel-tailwind" class="output-panel">
+        <textarea id="out-tailwind" class="code" readonly spellcheck="false" aria-label="Tailwind output" placeholder="Select collections and click Generate"></textarea>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <fig-button id="copy" variant="secondary" disabled>Copy CSS</fig-button>
+    <fig-button id="run" variant="primary" disabled>Generate</fig-button>
+  </footer>
+
+  <!-- offset keeps the toast above the footer -->
+  <dialog is="fig-toast" id="toast" duration="2000" offset="60" theme="auto"></dialog>
+</body>
+</html>

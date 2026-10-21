@@ -2,14 +2,18 @@
 // code.ts (Final, Documentado y Optimizado)
 // =================================================================
 
-// Muestra la interfaz del plugin con el tamaño especificado
-figma.showUI(__html__, { width: 820, height: 900 });
+// Muestra la interfaz del plugin. themeColors inyecta las variables --figma-color-* y la clase figma-light/figma-dark
+figma.showUI(__html__, { themeColors: true, width: 320, height: 720 });
 
 // --- TIPOS GLOBALES Y ESTRUCTURAS DE DATOS ---
 
 type ExportFormat = "css" | "tailwind";
 type NameMode = "code-syntax" | "figma-name";
 type CategoryKey = "Colors" | "Spacing" | "Typography" | "Other";
+
+// Contrato de mensajes (ver también ui/main.js):
+//   UI → plugin:  INIT, RUN
+//   plugin → UI:  INIT_DATA, RESULT y ERROR (siempre se responde, para que la UI no quede cargando)
 
 // Define la estructura del mensaje que la UI envía al plugin
 interface UIRequest {
@@ -23,15 +27,6 @@ interface UIRequest {
     modesByCollection?: Record<string, string>;
   };
 }
-
-// Extiende el tipo `Variable` para incluir posibles campos de sintaxis de código personalizados
-type VariableWithCodeSyntax = Variable & Partial<{
-  codeSyntax: string;
-  code_syntax: string;
-  codeName: string;
-  nameForCode: string;
-  nameForCodeSyntax: string;
-}>;
 
 // Estructura para organizar los datos que se enviarán a la configuración de Tailwind
 interface TwData {
@@ -81,6 +76,7 @@ figma.ui.onmessage = async (msg: UIRequest) => {
     } catch (e) {
       console.error("Error en INIT:", e);
       figma.notify("Error al cargar las colecciones.", { error: true });
+      postError("INIT", e);
     }
     return;
   }
@@ -122,9 +118,22 @@ figma.ui.onmessage = async (msg: UIRequest) => {
     } catch (e) {
       console.error("Error en RUN:", e);
       figma.notify("Ocurrió un error al generar el código. Revisa la consola.", { error: true });
+      postError("RUN", e);
     }
+    return;
   }
+
+  console.warn("Mensaje de la UI sin handler:", msg && (msg as { type?: unknown }).type);
 };
+
+/**
+ * Avisa a la UI que una petición falló, para que pueda salir del estado de carga.
+ */
+function postError(request: UIRequest["type"], error: unknown) {
+  const maybeMessage = error && typeof error === "object" ? (error as { message?: unknown }).message : undefined;
+  const message = typeof maybeMessage === "string" ? maybeMessage : String(error);
+  figma.ui.postMessage({ type: "ERROR", payload: { request, message } });
+}
 
 
 // --- LÓGICA DE PROCESAMIENTO PRINCIPAL ---
@@ -158,6 +167,14 @@ async function processAndGenerateCode(options: {
     }
   }
 
+  // Aliases can only be written as var(--x) when --x is part of this export
+  const exportedIds = new Set(selectedVars.map(v => v.id));
+  const originalIndex = new Map(selectedVars.map((v, i) => [v.id, i] as [string, number]));
+  // Detects different variables that end up with the same CSS name in the same block
+  const namesPerBlock: Record<string, Record<string, string>> = {};
+  const duplicates = new Set<string>();
+  const unresolved = new Set<string>();
+
   for (const v of selectedVars) {
     const col = allCollections.find(c => c.id === v.variableCollectionId)!;
     const modeIds = modesMap[col.id] || [];
@@ -178,29 +195,41 @@ async function processAndGenerateCode(options: {
         rawValue: rawValue as VariableValue, modeId: mId, allCollections
       });
       if (resolvedValue === null || resolvedValue === undefined) continue;
+      // Broken or circular alias: there is no concrete value to write
+      if (isAliasValue(resolvedValue)) {
+        unresolved.add(v.name);
+        continue;
+      }
 
       const tokenName = makeTokenName(v, col.name, nameMode);
       const cssVarName = toCssVar(tokenName, prefix);
       const { category, subName } = classifyVariable(v, col, nameMode, tokenName);
       const pathSegments = getCleanedPathSegments(v, col.name);
       const h3Group = chooseH3Group(category, subName, pathSegments);
-      
+
       const blockKey = ensureBlock(col, mId, catsPerBlock, blockMeta, modesMap);
       const groupArray = getGroupArray(catsPerBlock[blockKey], category, subName, h3Group);
-      
-  const out = formatOutputLine({ v, resolvedValue, aliasSourceVar, allCollections, cssVarName, nameMode, prefix, unitPxForFloat });
-  const cssLine = out.cssLine;
-  let tailwindEntry = out.tailwindEntry;
 
-      if (cssLine) {
-        // Preserve original order by attaching an index. Use the index from selectedVars.
-        const originalIndex = selectedVars.indexOf(v);
-        (groupArray as Array<Line>).push({ name: tokenName, text: cssLine, order: originalIndex });
-      }
-      // Ensure we always create a tailwind mapping. Fallback to var(--name) when none provided.
-      if (!tailwindEntry) tailwindEntry = `var(${cssVarName})`;
+      const blockNames = namesPerBlock[blockKey] || (namesPerBlock[blockKey] = {});
+      if (blockNames[cssVarName] && blockNames[cssVarName] !== v.id) duplicates.add(cssVarName);
+      blockNames[cssVarName] = v.id;
+
+      const { cssLine, tailwindEntry } = formatOutputLine({
+        v, resolvedValue, aliasSourceVar, exportedIds, allCollections, cssVarName, tokenName, subName, nameMode, prefix, unitPxForFloat
+      });
+
+      // Types without CSS output (e.g. BOOLEAN) are skipped so Tailwind never points to a missing variable
+      if (!cssLine || !tailwindEntry) continue;
+      (groupArray as Array<Line>).push({ name: tokenName, text: cssLine, order: originalIndex.get(v.id) });
       assignToTailwindData(twData, category, subName, tokenName, tailwindEntry);
     }
+  }
+
+  if (duplicates.size) {
+    figma.notify(`Nombres CSS duplicados: ${Array.from(duplicates).join(", ")}`, { timeout: 8000 });
+  }
+  if (unresolved.size) {
+    figma.notify(`Alias sin resolver (omitidos): ${Array.from(unresolved).join(", ")}`, { timeout: 8000 });
   }
 
   const cssOutput = composeCssOutput(catsPerBlock, blockMeta, modesMap, allCollections);
@@ -241,7 +270,12 @@ function classifyByTokenName(tokenName: string, resolvedType: VariableResolvedDa
   const parts = tokenName.split('-');
   const first = parts[0];
   const whole = tokenName;
-  const norm = whole.replace(/[\s_\-]/g, '').toLowerCase();
+  const norm = whole.replace(/[\s_-]/g, '').toLowerCase();
+
+  // Colors first: semantic names like "text-primary" or "border-subtle" are still colors
+  if (resolvedType === 'COLOR') {
+    return { category: 'Colors', subName: first.charAt(0).toUpperCase() + first.slice(1) };
+  }
 
   // Typography family
   if (first === 'typography' || norm.includes('font') || norm.includes('text')) {
@@ -262,11 +296,6 @@ function classifyByTokenName(tokenName: string, resolvedType: VariableResolvedDa
     return { category: 'Spacing', subName: 'Space' };
   }
 
-  // Colors (default fallback for color type)
-  if (resolvedType === 'COLOR') {
-    return { category: 'Colors', subName: first.charAt(0).toUpperCase() + first.slice(1) };
-  }
-
   return null;
 }
 
@@ -283,7 +312,7 @@ function getSpacingSubgroup(path: string): string {
 
 function getTypographySubgroup(path: string): string {
   const p = path.toLowerCase();
-  const norm = p.replace(/[\s_\-]/g, ""); // normalize camel/snake/kebab
+  const norm = p.replace(/[\s_-]/g, ""); // normalize camel/snake/kebab
   if (norm.includes("family")) return "Family";
   if (norm.includes("weight")) return "Weight";
   if (norm.includes("lineheight")) return "Line Height";
@@ -319,58 +348,101 @@ function formatOutputLine(options: {
   v: Variable,
   resolvedValue: VariableValue,
   aliasSourceVar: Variable | undefined,
+  exportedIds: Set<string>,
   allCollections: VariableCollection[],
   cssVarName: string,
+  tokenName: string,
+  subName: string,
   nameMode: NameMode,
   prefix: string,
   unitPxForFloat: boolean
 }) {
-  const { v, resolvedValue, aliasSourceVar, allCollections, cssVarName, nameMode, prefix, unitPxForFloat } = options;
-  let cssLine: string | null = null;
+  const { v, resolvedValue, aliasSourceVar, exportedIds, allCollections, cssVarName, tokenName, subName, nameMode, prefix, unitPxForFloat } = options;
+  let cssValue: string | null = null;
+  let cssComment = "";
   let tailwindEntry: string | null = null;
-  
-  if (aliasSourceVar) {
-    const srcCol = allCollections.find(c => c.id === aliasSourceVar.variableCollectionId)!;
-    const srcTokenName = makeTokenName(aliasSourceVar, srcCol.name, nameMode);
-    const srcCssVarName = toCssVar(srcTokenName, prefix);
-    cssLine = `${cssVarName}: var(${srcCssVarName});`;
-    // Also create a Tailwind entry so aliases are mapped in the Tailwind output
-    if (aliasSourceVar.resolvedType === 'COLOR') {
-      // Use resolvedValue to determine if alpha is present
-      const aliasedVal = resolvedValue as RGBA | undefined;
-      if (aliasedVal && typeof aliasedVal === 'object' && aliasedVal.r !== undefined) {
-        tailwindEntry = (aliasedVal.a < 1) ? `rgb(var(${srcCssVarName}) / <alpha-value>)` : `rgb(var(${srcCssVarName}))`;
-      } else {
-        // fallback: assume opaque to avoid showing empty alpha
-        tailwindEntry = `rgb(var(${srcCssVarName}))`;
-      }
-    } else {
-      tailwindEntry = `var(${srcCssVarName})`;
-    }
+
+  // Colors are stored as space-separated channels ("31 122 224") so Tailwind can inject opacity.
+  // Translucent colors carry their own alpha ("0 0 0 / 0.5") and therefore can't take <alpha-value>.
+  if (v.resolvedType === "COLOR") {
+    const rgba = resolvedValue as RGBA;
+    tailwindEntry = (rgba.a < 1) ? `rgb(var(${cssVarName}))` : `rgb(var(${cssVarName}) / <alpha-value>)`;
+  } else if (v.resolvedType === "FLOAT" || v.resolvedType === "STRING") {
+    tailwindEntry = `var(${cssVarName})`;
+  }
+
+  if (aliasSourceVar && exportedIds.has(aliasSourceVar.id)) {
+    const srcCol = allCollections.find(c => c.id === aliasSourceVar.variableCollectionId);
+    const srcTokenName = makeTokenName(aliasSourceVar, srcCol ? srcCol.name : "", nameMode);
+    cssValue = `var(${toCssVar(srcTokenName, prefix)})`;
   } else {
     switch (v.resolvedType) {
       case "COLOR": {
         const rgba = resolvedValue as RGBA;
-        const channels = `${Math.round(rgba.r * 255)} ${Math.round(rgba.g * 255)} ${Math.round(rgba.b * 255)}`;
-        cssLine = `${cssVarName}: ${channels};`;
-        if (rgba.a < 1) cssLine += ` /* alpha: ${rgba.a.toFixed(2)} */`;
-        tailwindEntry = (rgba.a < 1) ? `rgb(var(${cssVarName}) / <alpha-value>)` : `rgb(var(${cssVarName}))`;
+        cssValue = `${Math.round(rgba.r * 255)} ${Math.round(rgba.g * 255)} ${Math.round(rgba.b * 255)}`;
+        if (rgba.a < 1) cssValue += ` / ${roundNumber(rgba.a)}`;
         break;
       }
       case "FLOAT": {
-        const val = unitPxForFloat ? `${resolvedValue}px` : String(resolvedValue);
-        cssLine = `${cssVarName}: ${val};`;
-        tailwindEntry = `var(${cssVarName})`;
+        cssValue = formatFloat(v, tokenName, subName, resolvedValue as number, unitPxForFloat);
         break;
       }
       case "STRING": {
-        cssLine = `${cssVarName}: "${resolvedValue}";`;
-        tailwindEntry = `var(${cssVarName})`;
+        cssValue = formatString(subName, String(resolvedValue));
         break;
       }
     }
+    // The alias source isn't part of this export (other collection or remote library): inline its value
+    if (aliasSourceVar) cssComment = ` /* alias: ${aliasSourceVar.name} */`;
   }
+
+  const cssLine = cssValue === null ? null : `${cssVarName}: ${cssValue};${cssComment}`;
   return { cssLine, tailwindEntry };
+}
+
+/**
+ * Formatea un FLOAT. Pesos, opacidades, z-index y line-heights multiplicadores no llevan unidad.
+ */
+function formatFloat(v: Variable, tokenName: string, subName: string, value: number, unitPxForFloat: boolean): string {
+  const name = `${v.name}/${tokenName}`.toLowerCase().replace(/[\s_/-]/g, "");
+  const scopes: string[] = v.scopes || [];
+  const hasOnlyScopes = (allowed: string[]) => scopes.length > 0 && scopes.every(s => allowed.indexOf(s) !== -1);
+
+  // Figma stores opacity variables as 0–100
+  if (hasOnlyScopes(["OPACITY"]) || name.includes("opacity")) {
+    return String(roundNumber(value > 1 ? value / 100 : value));
+  }
+  const unitless =
+    !unitPxForFloat ||
+    subName === "Weight" ||
+    hasOnlyScopes(["FONT_WEIGHT"]) ||
+    /weight|zindex|ratio/.test(name) ||
+    // Line heights like 1.5 are multipliers, not pixels
+    ((subName === "Line Height" || name.includes("lineheight")) && value < 5);
+  return unitless ? String(roundNumber(value)) : `${roundNumber(value)}px`;
+}
+
+/**
+ * Formatea un STRING. Las listas de fuentes se dejan tal cual; el resto se escribe como string CSS.
+ */
+function formatString(subName: string, value: string): string {
+  if (subName === "Family") {
+    // "Inter, sans-serif" is a font stack: quote each family that contains spaces
+    return value.split(",").map(f => f.trim()).filter(Boolean)
+      .map(f => (/^["']/.test(f) || !/\s/.test(f)) ? f : `"${f}"`).join(", ");
+  }
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * Elimina el ruido de coma flotante de Figma (ej. 1.2000000476837158 -> 1.2).
+ */
+function roundNumber(n: number): number {
+  return Number(n.toFixed(4));
+}
+
+function isAliasValue(value: VariableValue): boolean {
+  return typeof value === "object" && value !== null && (value as { type?: string }).type === "VARIABLE_ALIAS";
 }
 
 /**
@@ -382,9 +454,15 @@ function assignToTailwindData(twData: TwData, category: CategoryKey, subName: st
   const scaleKey = tokenName.split('-').pop() || tokenName;
 
   if (category === 'Colors') {
-    const family = tokenName.substring(0, tokenName.lastIndexOf('-')) || tokenName;
+    // "white" has no scale: store it as DEFAULT so the class is "bg-white", not "bg-white-white"
+    const dash = tokenName.lastIndexOf('-');
+    const family = dash > 0 ? tokenName.substring(0, dash) : tokenName;
+    const shade = dash > 0 ? scaleKey : 'DEFAULT';
     if (!twData.colors[family]) twData.colors[family] = {};
-    twData.colors[family][scaleKey] = tailwindEntry;
+    // If any mode is translucent, keep the entry without <alpha-value> (it would override the alpha)
+    const previous = twData.colors[family][shade];
+    if (previous && previous.indexOf('<alpha-value>') === -1) return;
+    twData.colors[family][shade] = tailwindEntry;
     return;
   }
 
@@ -478,9 +556,9 @@ function composeCssOutput(
             const raw = String(s).trim();
             const n = Number(raw);
             if (!Number.isNaN(n)) return n;
-            // try replacing lone dashes with dots for patterns like '0-5' -> '0.5'
-            if (/^\d+-\d+$/.test(raw)) {
-              const alt = raw.replace('-', '.');
+            // decimals are written as '0_5' by kebab(); also accept '0-5' -> '0.5'
+            if (/^\d+[-_]\d+$/.test(raw)) {
+              const alt = raw.replace(/[-_]/, '.');
               const a = Number(alt);
               if (!Number.isNaN(a)) return a;
             }
@@ -533,7 +611,13 @@ function composeTailwindOutput(twData: TwData): string {
     const sections: string[] = [];
     if (Object.keys(twData.colors).length > 0) {
     const colorFamilies = Object.keys(twData.colors).sort().map(family => {
-      const shades = Object.keys(twData.colors[family]).sort((a,b) => {
+      const familyShades = Object.keys(twData.colors[family]);
+      if (familyShades.length === 1 && familyShades[0] === 'DEFAULT') {
+        return `        "${family}": "${twData.colors[family].DEFAULT}"`;
+      }
+      const shades = familyShades.sort((a,b) => {
+        if (a === 'DEFAULT') return -1;
+        if (b === 'DEFAULT') return 1;
         const na = Number(a);
         const nb = Number(b);
         const aIsNum = !Number.isNaN(na);
@@ -595,7 +679,11 @@ ${sections.join(',\n')}
 function kebab(s: unknown): string {
   const str = String(s || '').trim();
   if (!str) return '';
-  return str.replace(/[/\\]/g, "-").replace(/\s+/g, "-").replace(/[_]+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").replace(/--+/g, "-").toLowerCase();
+  return str
+    .normalize("NFD").replace(/[̀-ͯ]/g, "") // "tamaño" -> "tamano"
+    .replace(/[/\\]/g, "-").replace(/\s+/g, "-").replace(/[_]+/g, "-")
+    .replace(/(\d)\.(\d)/g, "$1_$2") // "0.5" -> "0_5" (a dot isn't valid in a CSS name and must not collide with "05")
+    .replace(/[^a-zA-Z0-9_-]/g, "").replace(/--+/g, "-").replace(/^-+|-+$/g, "").toLowerCase();
 }
 
 /**
@@ -611,18 +699,24 @@ function toCssVar(name: string, pfx: string): string {
  */
 function makeTokenName(v: Variable, collectionName: string, nameMode: NameMode): string {
   if (nameMode === "code-syntax") {
-    const meta = v as VariableWithCodeSyntax;
-    // Try several possible metadata fields and ensure they're strings
-    const candidates = [meta.codeSyntax, meta.code_syntax, meta.codeName, meta.nameForCode, meta.nameForCodeSyntax];
-    for (const c of candidates) {
-      if (typeof c === 'string' && c.trim().length > 0) {
-        return kebab(c.replace(/^--+/, ""));
-      }
-    }
+    const web = getWebCodeSyntax(v);
+    if (web) return web;
     const joined = getCleanedPathSegments(v, collectionName).join('-');
     return kebab(joined || v.name || '');
   }
   return kebab(v.name || '');
+}
+
+/**
+ * Lee el Code Syntax WEB definido en Figma (`variable.codeSyntax.WEB`).
+ * Acepta "var(--name)", "--name" o "name" y lo respeta tal como lo escribió el diseñador.
+ */
+function getWebCodeSyntax(v: Variable): string {
+  const raw = ((v.codeSyntax && v.codeSyntax.WEB) || "").trim();
+  if (!raw) return "";
+  const fromVar = raw.match(/^var\(\s*(--[^,)\s]+)/);
+  const name = (fromVar ? fromVar[1] : raw).replace(/^--+/, "");
+  return name.replace(/[^a-zA-Z0-9_-]/g, "");
 }
 
 /**
@@ -640,7 +734,10 @@ function resolveModesForCollection(col: VariableCollection, requestedModes?: str
 /**
  * Encuentra el primer modo de una variable que tiene un valor definido.
  */
-function findFirstDefinedModeId(v: Variable, col: VariableCollection): string | null {
+function findFirstDefinedModeId(v: Variable, col: VariableCollection | undefined): string | null {
+  // Remote library variables have no local collection: use whatever mode they define
+  if (!col) return Object.keys(v.valuesByMode)[0] || null;
+  if (col.defaultModeId && v.valuesByMode[col.defaultModeId] !== undefined) return col.defaultModeId;
   for (const mode of col.modes) {
     if (v.valuesByMode[mode.modeId] !== undefined) return mode.modeId;
   }
@@ -668,7 +765,7 @@ async function resolveAlias(options: { rawValue: VariableValue, modeId: string, 
       if (sourceVar) {
         let value = sourceVar.valuesByMode[modeId];
         if (value === undefined) {
-          const sourceCol = allCollections.find(c => c.id === sourceVar.variableCollectionId)!;
+          const sourceCol = allCollections.find(c => c.id === sourceVar.variableCollectionId);
           const fallbackModeId = findFirstDefinedModeId(sourceVar, sourceCol);
           if (fallbackModeId) value = sourceVar.valuesByMode[fallbackModeId];
         }
@@ -696,10 +793,14 @@ function ensureBlock(
     if (catsPerBlock[key]) return key;
     catsPerBlock[key] = { Colors: { subs: {} }, Spacing: { subs: {} }, Typography: { subs: {} }, Other: { subs: {} } };
     const modeName = col.modes.find(m => m.modeId === modeId)?.name || modeId;
-    
-    const totalModes = Object.keys(modesMap).reduce((acc, current) => acc + modesMap[current].length, 0);
 
-    const selector = totalModes > 1 ? `:root[data-theme="${kebab(modeName)}"]` : `:root`;
+    // Decided per collection: single-mode collections (e.g. Primitives) always live in :root.
+    // In multi-mode collections the default mode also lives in :root so the page works without data-theme.
+    const exportedModes = modesMap[col.id] || [];
+    const defaultModeId = exportedModes.indexOf(col.defaultModeId) !== -1 ? col.defaultModeId : exportedModes[0];
+    const themeSelector = `:root[data-theme="${kebab(modeName)}"]`;
+    let selector = ":root";
+    if (exportedModes.length > 1) selector = modeId === defaultModeId ? `:root, ${themeSelector}` : themeSelector;
     blockMeta[key] = { collectionName: col.name, modeName, selector };
     return key;
 }

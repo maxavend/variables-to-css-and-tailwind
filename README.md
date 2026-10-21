@@ -5,7 +5,8 @@ Este repositorio contiene un plugin de Figma que extrae variables de diseño (to
 ## Contenido del repositorio
 
 - `code.ts` / `code.js` — Lógica principal del plugin que se ejecuta dentro de Figma.
-- `ui.html` — Interfaz de usuario embebida para interactuar con el plugin.
+- `ui/` — Fuente de la interfaz (UI3 nativa con [FigUI3](https://www.npmjs.com/package/@rogieking/figui3)): `index.html`, `main.js`, `styles.css`.
+- `dist/ui.html` — Interfaz compilada en un solo HTML (Vite + `vite-plugin-singlefile`); la genera `npm run build`.
 - `manifest.json` — Metadatos del plugin (entradas `main` y `ui`).
 - `package.json` — Scripts y dependencias del proyecto.
 - `tsconfig.json` — Configuración de TypeScript (si aplica).
@@ -36,12 +37,11 @@ npm install
 yarn
 ```
 
-2. Compila (o inicia el watcher) según los scripts definidos en `package.json`:
+2. Compila el código del plugin (`code.js`) y la UI (`dist/ui.html`):
 
 ```bash
 npm run build
-# o (si existe)
-npm run dev
+# por separado: npm run build:code / npm run build:ui
 ```
 
 3. Para probar el plugin en Figma (modo desarrollo):
