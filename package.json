@@ -11,8 +11,8 @@
     "build": "npm run build:code && npm run build:ui",
     "build:code": "tsc -p tsconfig.json",
     "build:ui": "vite build",
-    "lint": "eslint --ext .ts,.tsx,.js --ignore-pattern node_modules --ignore-pattern dist --ignore-pattern code.js .",
-    "lint:fix": "eslint --ext .ts,.tsx,.js --ignore-pattern node_modules --ignore-pattern dist --ignore-pattern code.js --fix .",
+    "lint": "eslint --ext .ts,.tsx,.js --ignore-pattern node_modules --ignore-pattern dist --ignore-pattern code.js --ignore-pattern out .",
+    "lint:fix": "eslint --ext .ts,.tsx,.js --ignore-pattern node_modules --ignore-pattern dist --ignore-pattern code.js --ignore-pattern out --fix .",
     "watch": "npm run build:code -- --watch",
     "test": "npm run build:code && node tests/plugin.test.js"
   },

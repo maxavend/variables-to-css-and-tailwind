@@ -1,8 +1,8 @@
-# Variables to CSS and Tailwind
+# Tokens to Code
 
 Plugin de Figma que exporta las **variables locales** de un archivo como CSS custom properties y como un tema de `tailwind.config.js` que apunta a esas variables.
 
-![Variables to CSS and Tailwind](assets/cover.png)
+![Tokens to Code](assets/cover.png)
 
 ## Qué hace
 

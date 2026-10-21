@@ -1,0 +1,71 @@
+<!doctype html>
+<!--
+  Hosts the real plugin outside Figma: dist/ui.html in an iframe, code.js in this page with a mocked `figma`.
+  Serve the repo root over http (same origin is needed to drive the UI), e.g. python3 -m http.server.
+  Query: ?theme=light|dark  &tab=css|tailwind  &run=1 (click Generate)  &prefix=ds
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Plugin harness</title>
+  <style>
+    html, body { margin: 0; background: transparent; }
+    iframe { display: block; width: 320px; height: 720px; border: 0; }
+  </style>
+</head>
+<body>
+  <iframe id="ui" src="../../dist/ui.html" title="Plugin UI"></iframe>
+  <script src="demo-figma.js"></script>
+  <script>
+    const q = new URLSearchParams(location.search);
+    const frame = document.getElementById("ui");
+    window.figma = makeDemoFigma((m) => frame.contentWindow.postMessage({ pluginMessage: m }, "*"));
+    window.__html__ = "";
+    window.addEventListener("message", (e) => {
+      if (e.source === frame.contentWindow && e.data && e.data.pluginMessage) figma.ui.onmessage(e.data.pluginMessage);
+    });
+
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    frame.addEventListener("load", async () => {
+      const doc = frame.contentDocument;
+      doc.documentElement.classList.add(q.get("theme") === "dark" ? "figma-dark" : "figma-light");
+      await wait(300);
+      // sel=C1,C2:l+d,C3 → whole collections, or only the listed modes of one
+      for (const part of (q.get("sel") || "").split(",").filter(Boolean)) {
+        const [col, modes] = part.split(":");
+        const boxes = modes
+          ? modes.split("+").map((m) => doc.querySelector(`fig-checkbox[data-collection-id="${col}"][data-mode-id="${m}"]`))
+          : [doc.querySelector(`fig-checkbox[data-collection-id="${col}"]:not([data-mode-id])`)];
+        for (const box of boxes) {
+          box.querySelector("input").click();
+          await wait(30);
+        }
+      }
+      if (q.get("prefix")) {
+        doc.getElementById("prefix-toggle").click();
+        await wait(100);
+        const input = doc.querySelector("#prefix input");
+        input.value = q.get("prefix");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      if (q.get("run")) {
+        await wait(200);
+        doc.getElementById("run").click();
+        await wait(400);
+      }
+      if (q.get("tab") === "tailwind") doc.querySelector('fig-tab[value="tailwind"]').click();
+      // scroll=<text>: scroll the visible output so the line containing <text> sits at the top
+      if (q.get("scroll")) {
+        await wait(100);
+        const area = doc.getElementById(q.get("tab") === "tailwind" ? "out-tailwind" : "out-css");
+        const line = area.value.slice(0, area.value.indexOf(q.get("scroll"))).split("\n").length - 1;
+        area.scrollTop = line * parseFloat(getComputedStyle(area).lineHeight) - 4;
+      }
+      // drop focus rings so the screenshot looks idle
+      doc.activeElement && doc.activeElement.blur();
+      document.body.dataset.ready = "1";
+    });
+  </script>
+  <script src="../../code.js"></script>
+</body>
+</html>

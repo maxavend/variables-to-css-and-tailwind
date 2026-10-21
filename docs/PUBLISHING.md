@@ -32,7 +32,7 @@ Ninguno de los dos se versiona (están en `.gitignore`): genéralos siempre just
 
 ## 3. Publicar
 
-Figma desktop → **Plugins → Manage plugins** → *Variables to CSS and Tailwind* → **Publish** (o **Publish new version** si ya está publicado).
+Figma desktop → **Plugins → Manage plugins** → *Tokens to Code* (antes *Variables to CSS and Tailwind*) → **Publish** (o **Publish new version** si ya está publicado).
 
 `manifest.json` ya tiene el `id` `1542210914567728604`. Si ese id pertenece a un plugin ya publicado con tu cuenta, Figma lo tratará como una **nueva versión**; si no, crea el plugin desde *Manage plugins* y copia el id nuevo al manifest.
 
@@ -42,12 +42,21 @@ Figma desktop → **Plugins → Manage plugins** → *Variables to CSS and Tailw
 |---|---|---|
 | Icon | `assets/icon.png` | 128 × 128 px |
 | Cover art | `assets/cover.png` | 1920 × 1080 px |
+| Carousel (opcional) | `assets/gallery-1-modes.png`, `assets/gallery-2-tailwind.png` | 1920 × 1080 px |
+
+Las imágenes se generan desde `design/marketing/`. Muestran la UI real del plugin y la salida real de `code.js` con un sistema de variables de demo (`demo-figma.js`):
+
+```bash
+npm run build && design/marketing/render.sh
+```
+
+Después copia `design/marketing/out/{cover,modes,tailwind}.png` a `assets/`.
 
 ### Textos de la ficha (en inglés, como la UI)
 
 **Name**
 ```text
-Variables to CSS and Tailwind
+Tokens to Code
 ```
 
 **Tagline**

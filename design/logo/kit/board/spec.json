@@ -1,0 +1,54 @@
+{
+  "brand": "Tokens to Code",
+  "tagline": "Tus variables de Figma, listas para el código",
+  "brief": "Plugin de Figma que exporta las variables locales como CSS custom properties y como tema de Tailwind, con cada modo (claro, oscuro, alto contraste) como [data-theme]. El logo debía tener vida, color y una idea propia, y verse bien como ícono de Figma Community.",
+  "adjectives": [
+    "vivo",
+    "preciso",
+    "colorido",
+    "útil"
+  ],
+  "criteria": "Éxito: se reconoce a 16 px, funciona en un color, no parece otro logo de código con llaves, y cuenta la idea de variables con modos.",
+  "mockups": [
+    "favicon-tab",
+    "app-icon",
+    "readme",
+    "website",
+    "sticker",
+    "social"
+  ],
+  "nav": [
+    "Cómo funciona",
+    "Figma Community",
+    "GitHub"
+  ],
+  "brand_color": "#007AFF",
+  "greyscale": false,
+  "designer": "Maximiliano Avendaño",
+  "round": 4,
+  "concepts": [
+    {
+      "name": "Abanico de modos",
+      "symbol": "../final/glass/symbol-glass-on-light.svg",
+      "lockup": "../final/glass/logo-horizontal-glass-on-light.svg",
+      "symbol_on_tile": "../final/glass/symbol-glass-on-light.svg",
+      "lockup_on_dark": "../final/glass/logo-horizontal-glass-on-dark.svg",
+      "idea": "Un abanico de swatches, uno por modo; la tarjeta del frente lleva el -- de la variable CSS.",
+      "rationale": [
+        "Un swatch es una variable; tres en abanico son sus modos (claro, oscuro, contraste)",
+        "El -- de las custom properties marca el paso de diseño a código",
+        "Las tarjetas de atrás forman un barrido que sugiere viento (Tailwind)",
+        "Huecos reales entre tarjetas: funciona en un solo color y en negativo",
+        "Versión Liquid Glass nativa: esquinas continuas, colores de sistema de Apple, luz desde arriba y sombras de contacto mínimas"
+      ],
+      "symbol_on_dark": "../final/glass/symbol-glass-on-dark.svg"
+    }
+  ],
+  "recommendation": "Usar el ícono sobre fondo tinta (#1C1B3A) para Figma Community, y el corte pequeño para favicon y tamaños de 24 px o menos.",
+  "next_steps": [
+    "Reemplazar assets/icon.png por el nuevo ícono de 128 px",
+    "Actualizar la portada 1920×1080 con el nuevo logo",
+    "Usar el azul #2F6BFF como acento en la UI si se quiere coherencia"
+  ],
+  "tile_color": "#F2F2F7"
+}

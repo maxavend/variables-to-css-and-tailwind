@@ -1,0 +1,59 @@
+/* Shared look for the Figma Community images (1920 × 1080). */
+@font-face { font-family: "Inter"; font-weight: 400; src: url(fonts/inter-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 500; src: url(fonts/inter-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 600; src: url(fonts/inter-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 700; src: url(fonts/inter-latin-700-normal.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url(fonts/jetbrains-mono-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 500; src: url(fonts/jetbrains-mono-latin-500-normal.woff2) format("woff2"); }
+
+:root {
+  --bg: #F5F5F7;
+  --ink: #1D1D1F;
+  --ink-2: #6E6E73;
+  --ink-3: #86868B;
+  --line: rgba(0, 0, 0, 0.08);
+  --blue: #007AFF;
+  --orange: #FF9F0A;
+  --red: #FF453A;
+  /* Xcode light / dark syntax colours */
+  --c-com: #707F8C; --c-sel: #AD3DA4; --c-prop: #3E8087; --c-str: #C41A16; --c-num: #1C00CF; --c-plain: #1D1D1F;
+}
+
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; }
+body {
+  background: linear-gradient(180deg, #FAFAFC 0%, var(--bg) 60%, #EDEDF1 100%);
+  color: var(--ink);
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+
+.kicker { display: flex; align-items: center; gap: 14px; font-size: 26px; font-weight: 600; color: var(--ink-2); letter-spacing: -0.01em; }
+.kicker img { width: 44px; height: 44px; border-radius: 22.37%; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.06); }
+h1 { font-size: 88px; line-height: 1.04; font-weight: 600; letter-spacing: -0.035em; }
+h2 { font-size: 72px; line-height: 1.06; font-weight: 600; letter-spacing: -0.032em; }
+.lede { font-size: 32px; line-height: 1.38; font-weight: 400; color: var(--ink-2); letter-spacing: -0.012em; }
+.lede b { color: var(--ink); font-weight: 600; }
+code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-feature-settings: "calt" 0; }
+
+/* Figma-style plugin window around the real UI */
+.window {
+  background: #fff; border-radius: 18px; overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 2px 6px rgba(0,0,0,.05), 0 24px 60px rgba(0,0,0,.12);
+}
+.window-bar { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 14px; border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 600; }
+.window-bar img { width: 16px; height: 16px; border-radius: 4px; }
+.window-bar .x { margin-left: auto; color: #8E8E93; font-size: 15px; font-weight: 400; }
+.window.dark { background: #2C2C2C; color: #fff; }
+.window.dark .window-bar { border-color: rgba(255,255,255,.08); }
+.window iframe { display: block; width: 320px; height: 720px; border: 0; background: transparent; }
+
+/* code panels */
+.code { font-family: "JetBrains Mono", ui-monospace, monospace; white-space: pre; color: var(--c-plain); }
+.code .com { color: var(--c-com); }
+.code .sel { color: var(--c-sel); font-weight: 500; }
+.code .prop { color: var(--c-prop); }
+.code .str { color: var(--c-str); }
+.code .num { color: var(--c-num); }
+.code.dark { --c-com: #7F8C98; --c-sel: #FF7AB2; --c-prop: #67B7A4; --c-str: #FF8170; --c-num: #D9C97C; --c-plain: #F5F5F7; }

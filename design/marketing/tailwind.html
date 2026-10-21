@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>A Tailwind theme that follows your variables</title>
+  <link rel="stylesheet" href="shared.css" />
+  <style>
+    .stage { position: absolute; inset: 0; padding: 110px 150px 0; }
+    h2 { margin: 44px 0 24px; }
+    .lede { max-width: 1240px; }
+    .lede code { font-size: 28px; color: var(--ink); white-space: nowrap; }
+    .row { position: absolute; left: 150px; right: 150px; bottom: 110px; display: grid; grid-template-columns: 760px 1fr; gap: 36px; align-items: stretch; }
+    .row > div:first-child { display: flex; }
+    .config { flex: 1; }
+    .config { background: #1D1D1F; border-radius: 28px; padding: 28px 34px; font-size: 17px; line-height: 1.55;
+      box-shadow: 0 2px 6px rgba(0,0,0,.08), 0 24px 56px rgba(0,0,0,.16); }
+    .config .file { font: 500 16px "Inter"; color: #98989D; margin-bottom: 12px; letter-spacing: 0; }
+
+    .right { display: flex; flex-direction: column; gap: 28px; justify-content: flex-end; }
+    .usage { background: #fff; border-radius: 28px; padding: 28px 32px; font-size: 18.5px; line-height: 1.65;
+      box-shadow: 0 0 0 1px var(--line), 0 2px 6px rgba(0,0,0,.04), 0 18px 44px rgba(0,0,0,.07); }
+    .usage .file { font: 500 16px "Inter"; color: var(--ink-3); margin-bottom: 10px; }
+    .previews { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+    .pv { border-radius: 28px; padding: 26px; background: rgb(var(--surface-raised)); box-shadow: 0 0 0 1px var(--line), 0 18px 44px rgba(0,0,0,.08); }
+    .pv .tag { font: 600 15px "Inter"; letter-spacing: .02em; color: rgb(var(--text-secondary)); margin-bottom: 14px; }
+    .pv .tag code { font-size: 14px; }
+    /* the snippet's classes, as Tailwind would resolve them from the generated theme */
+    .pv article { background: rgb(var(--surface)); color: rgb(var(--text-primary)); border-radius: 20px; padding: 24px; }
+    .pv h3 { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; }
+    .pv p { font-size: 18px; color: rgb(var(--text-secondary)); margin: 4px 0 18px; }
+    .pv button { font: 600 17px "Inter"; border: 0; border-radius: 999px; padding: 10px 20px; background: rgb(var(--accent) / 0.12); color: rgb(var(--accent)); }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="kicker"><img src="../logo/kit/final/glass/icon-glass.svg" alt="" />Tokens to Code</div>
+    <h2>A Tailwind theme that follows your variables.</h2>
+    <p class="lede">Every color points to its CSS variable with <code>&lt;alpha-value&gt;</code>, so opacity modifiers and theme switching just work.</p>
+  </div>
+  <div class="row">
+    <div>
+      <div class="config"><div class="file">tailwind.config.js</div><div class="code dark" id="config"></div></div>
+    </div>
+    <div class="right">
+      <div class="usage"><div class="file">release-notes.html</div><div class="code" id="usage"></div></div>
+      <div class="previews">
+        <div class="pv" data-theme="light"><div class="tag mono">data-theme="light"</div>
+          <article><h3>Release notes</h3><p>Version 2.0 · 3 min read</p><button>Read</button></article></div>
+        <div class="pv" data-theme="dark"><div class="tag mono">data-theme="dark"</div>
+          <article><h3>Release notes</h3><p>Version 2.0 · 3 min read</p><button>Read</button></article></div>
+      </div>
+    </div>
+  </div>
+  <script src="highlight.js"></script>
+  <script>
+    (async () => {
+      const css = await (await fetch("out/demo.css")).text();
+      const style = document.createElement("style");
+      style.textContent = css.replace(/:root, :root\[data-theme="light"\]/g, ':root, [data-theme="light"]')
+                             .replace(/:root\[data-theme=/g, "[data-theme=");
+      document.head.append(style);
+
+      // Real output: the colour entries this example uses, verbatim
+      const tw = (await (await fetch("out/demo.tailwind.js")).text()).split("\n");
+      const pick = (start, end) => {
+        const a = tw.findIndex((l) => l.includes(start));
+        const b = end ? tw.findIndex((l, i) => i >= a && l.includes(end)) : a;
+        return tw.slice(a, b + 1);
+      };
+      const lines = [
+        "theme: {", "  extend: {", "    colors: {",
+        ...pick('"accent"'), ...pick('"surface": {', "},"), ...pick('"text": {', "},"),
+        "    }", "  }", "}",
+      ];
+      // the picked entries sit 8+ spaces deep in the real file; outdent them by 2 to sit under "colors: {"
+      for (let i = 3; i < lines.length - 3; i++) lines[i] = lines[i].slice(2);
+      document.getElementById("config").innerHTML = highlight(lines.join("\n"));
+
+      document.getElementById("usage").innerHTML = highlight([
+        '<article class="bg-surface text-text-primary">',
+        '  <h3>Release notes</h3>',
+        '  <p class="text-text-secondary">Version 2.0</p>',
+        '  <button class="bg-accent/10 text-accent">Read</button>',
+        '</article>',
+      ].join("\n"));
+      document.body.dataset.ready = "1";
+    })();
+  </script>
+</body>
+</html>

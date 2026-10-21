@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="t"><title id="t">Token en llaves</title>
+<g fill="none" stroke="#000" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+<path d="M96 44H88Q64 44 64 68V104Q64 128 40 128Q64 128 64 152V188Q64 212 88 212H96"/>
+<path d="M160 44H168Q192 44 192 68V104Q192 128 216 128Q192 128 192 152V188Q192 212 168 212H160"/>
+</g>
+<rect x="100" y="100" width="56" height="56" rx="14"/>
+</svg>
