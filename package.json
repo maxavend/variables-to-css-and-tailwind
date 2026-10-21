@@ -1,20 +1,23 @@
 {
-  "name": "Variables-to-CSS-and-Tailwind-",
+  "name": "variables-to-css-and-tailwind",
   "version": "1.0.0",
-  "description": "Your Figma Plugin",
+  "private": true,
+  "description": "Figma plugin that exports local variables as CSS custom properties and a Tailwind theme.",
   "main": "code.js",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "build": "npm run build:code && npm run build:ui",
     "build:code": "tsc -p tsconfig.json",
     "build:ui": "vite build",
     "lint": "eslint --ext .ts,.tsx,.js --ignore-pattern node_modules --ignore-pattern dist --ignore-pattern code.js .",
     "lint:fix": "eslint --ext .ts,.tsx,.js --ignore-pattern node_modules --ignore-pattern dist --ignore-pattern code.js --fix .",
-    "watch": "npm run build:code -- --watch"
+    "watch": "npm run build:code -- --watch",
+    "test": "npm run build:code && node tests/plugin.test.js"
   },
-  "author": "",
-  "license": "",
   "devDependencies": {
-    "@figma/eslint-plugin-figma-plugins": "*",
+    "@figma/eslint-plugin-figma-plugins": "^0.16.1",
     "@figma/plugin-typings": "^1.116.0",
     "@typescript-eslint/eslint-plugin": "^6.12.0",
     "@typescript-eslint/parser": "^6.12.0",
@@ -57,6 +60,23 @@
           "project": null,
           "ecmaVersion": "latest",
           "sourceType": "module"
+        }
+      },
+      {
+        "files": [
+          "tests/**/*.js"
+        ],
+        "env": {
+          "node": true,
+          "es2022": true
+        },
+        "parserOptions": {
+          "project": null,
+          "ecmaVersion": "latest",
+          "sourceType": "script"
+        },
+        "rules": {
+          "@typescript-eslint/no-var-requires": "off"
         }
       }
     ]
