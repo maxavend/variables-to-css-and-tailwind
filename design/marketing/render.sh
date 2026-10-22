@@ -15,12 +15,17 @@ SERVER=$!
 trap 'kill $SERVER; rm -rf "$PROFILE"' EXIT
 sleep 1
 
-for page in cover modes tailwind; do
+# carousel order; slide 1 is also the cover
+PAGES=(cover selection modes aliases names values tailwind native)
+mkdir -p out/slides
+for i in "${!PAGES[@]}"; do
+  page=${PAGES[$i]}
+  name=$(printf "%02d-%s" $((i + 1)) "$page")
   # render at 2× and scale down for cleaner antialiasing
   "$CHROME" --headless=new --disable-gpu --hide-scrollbars --user-data-dir="$PROFILE" --force-device-scale-factor=2 \
-    --window-size=1920,1080 --virtual-time-budget=10000 --screenshot="out/$page@2x.png" \
+    --window-size=1920,1080 --virtual-time-budget=10000 --screenshot="out/$name@2x.png" \
     "http://127.0.0.1:$PORT/design/marketing/$page.html" >/dev/null 2>&1
-  sips -z 1080 1920 "out/$page@2x.png" --out "out/$page.png" >/dev/null
-  rm "out/$page@2x.png"
-  echo "out/$page.png"
+  sips -z 1080 1920 "out/$name@2x.png" --out "out/slides/$name.png" >/dev/null
+  rm "out/$name@2x.png"
+  echo "out/slides/$name.png"
 done

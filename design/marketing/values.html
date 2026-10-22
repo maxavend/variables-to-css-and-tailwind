@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Values ready to paste</title>
+  <link rel="stylesheet" href="shared.css" />
+  <style>
+    .table { padding: 10px 40px; }
+    .tr { display: grid; grid-template-columns: 260px 420px 1fr; align-items: center; padding: 19px 0; border-top: 1px solid var(--line); }
+    .tr:first-child { border-top: 0; }
+    .tr.head { font: 600 17px "Inter"; color: var(--ink-3); letter-spacing: .02em; padding: 18px 0 12px; }
+    .kind { font-size: 22px; font-weight: 500; color: var(--ink-2); }
+    .fig { display: flex; align-items: center; gap: 14px; font-size: 22px; font-weight: 500; }
+    .fig .sw { width: 26px; height: 26px; border-radius: 7px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.1); }
+    .fig small { color: var(--ink-3); font-size: 18px; font-weight: 400; }
+    .tr .code { font-size: 21px; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div class="kicker"><img src="../logo/kit/final/glass/icon-glass.svg" alt="" />Tokens to Code</div>
+    <h2>Values that are ready to paste.</h2>
+    <p class="lede">Colors become RGB channels for <code>rgb()</code>, alpha included. Font weights and line‑height multipliers stay unitless; other numbers get <code>px</code>.</p>
+  </div>
+  <div class="bottom card table">
+    <div class="tr head"><span>TYPE</span><span>IN FIGMA</span><span>IN CSS</span></div>
+    <div class="tr"><span class="kind">Color</span><span class="fig"><span class="sw" style="background:#007AFF"></span>#007AFF</span><div class="code" data-prop="--blue-500"></div></div>
+    <div class="tr"><span class="kind">Color with alpha</span><span class="fig"><span class="sw" style="background:rgba(0,0,0,.4)"></span>#000000 <small>40%</small></span><div class="code" data-prop="--scrim"></div></div>
+    <div class="tr"><span class="kind">Spacing</span><span class="fig">16</span><div class="code" data-prop="--spacing-4"></div></div>
+    <div class="tr"><span class="kind">Font weight</span><span class="fig">600</span><div class="code" data-prop="--font-weight-semibold"></div></div>
+    <div class="tr"><span class="kind">Line height</span><span class="fig">1.4</span><div class="code" data-prop="--font-line-height-body"></div></div>
+    <div class="tr"><span class="kind">Font family</span><span class="fig">Inter, system-ui, sans-serif</span><div class="code" data-prop="--font-family-sans"></div></div>
+  </div>
+  <script src="highlight.js"></script>
+  <script>
+    (async () => {
+      const lines = (await (await fetch("out/demo.css")).text()).split("\n");
+      for (const el of document.querySelectorAll("[data-prop]")) {
+        el.innerHTML = highlight(lines.find((l) => l.trim().startsWith(el.dataset.prop + ":")).trim());
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -42,7 +42,20 @@ Figma desktop → **Plugins → Manage plugins** → *Tokens to Code* (antes *Va
 |---|---|---|
 | Icon | `assets/icon.png` | 128 × 128 px |
 | Cover art | `assets/cover.png` | 1920 × 1080 px |
-| Carousel (opcional) | `assets/gallery-1-modes.png`, `assets/gallery-2-tailwind.png` | 1920 × 1080 px |
+| Carousel | `assets/carousel/01-cover.png` … `08-native.png`, en ese orden | 1920 × 1080 px |
+
+El carrusel cuenta el producto en 8 imágenes:
+
+| # | Archivo | Mensaje |
+|---|---|---|
+| 1 | `01-cover.png` | Portada: nombre, propuesta y el plugin en uso |
+| 2 | `02-selection.png` | Exporta solo las colecciones y modos que marques |
+| 3 | `03-modes.png` | Cada modo es un bloque `[data-theme]` |
+| 4 | `04-aliases.png` | Los alias se mantienen como `var()` |
+| 5 | `05-names.png` | Code Syntax, nombre de Figma y prefijo |
+| 6 | `06-values.png` | Valores listos para pegar (RGB, alpha, px, sin unidad) |
+| 7 | `07-tailwind.png` | Tema de Tailwind que apunta a las variables |
+| 8 | `08-native.png` | UI3 claro y oscuro, sin red, con teclado |
 
 Las imágenes se generan desde `design/marketing/`. Muestran la UI real del plugin y la salida real de `code.js` con un sistema de variables de demo (`demo-figma.js`):
 
@@ -50,7 +63,7 @@ Las imágenes se generan desde `design/marketing/`. Muestran la UI real del plug
 npm run build && design/marketing/render.sh
 ```
 
-Después copia `design/marketing/out/{cover,modes,tailwind}.png` a `assets/`.
+Después copia `design/marketing/out/slides/*.png` a `assets/carousel/` y `01-cover.png` también a `assets/cover.png`.
 
 ### Textos de la ficha (en inglés, como la UI)
 

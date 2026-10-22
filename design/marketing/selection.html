@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Export exactly what you need</title>
+  <link rel="stylesheet" href="shared.css" />
+  <style>
+    .top { right: 870px; }
+    .blocks { position: absolute; left: 150px; bottom: 110px; width: 840px; padding: 32px 36px; font-size: 21px; line-height: 1.7; }
+    .blocks .file { font: 500 16px "Inter"; color: var(--ink-3); margin-bottom: 10px; }
+    /* the real plugin, zoomed in on its top half */
+    .zoom { position: absolute; right: 150px; top: 110px; width: 640px; height: 860px; overflow: clip; border-radius: 28px; }
+    .zoom .window { transform: scale(2); transform-origin: top left; width: 320px; border-radius: 9px; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div class="kicker"><img src="../logo/kit/final/glass/icon-glass.svg" alt="" />Tokens to Code</div>
+    <h2>Export exactly<br />what you need.</h2>
+    <p class="lede">Pick the collections, and for collections with several modes, pick the modes. Only what's checked is written.</p>
+  </div>
+  <div class="card blocks"><div class="file">Generated blocks</div><div class="code" id="blocks"></div></div>
+  <div class="zoom card">
+    <div class="window">
+      <div class="window-bar"><img src="../logo/kit/final/glass/icon-glass.svg" alt="" />Tokens to Code<span class="x">✕</span></div>
+      <iframe src="harness.html?theme=light&amp;sel=C1,C2:l%2Bd,C3&amp;run=1" title="Plugin"></iframe>
+    </div>
+  </div>
+  <script src="highlight.js"></script>
+  <script>
+    (async () => {
+      // the block headers and selectors from a real run with Theme limited to Light and Dark
+      const lines = (await (await fetch("out/demo-selection.css")).text()).split("\n")
+        .filter((l) => l.startsWith("/* --- Collection") || l.startsWith(":root"));
+      const out = [];
+      for (let i = 0; i < lines.length; i += 2) {
+        const name = lines[i].match(/Collection: (.*) \| Mode: (.*) ---/);
+        out.push(`${lines[i + 1].replace(" {", "")}  /* ${name[1]}${name[1] === "Theme" ? " · " + name[2] : ""} */`);
+      }
+      document.getElementById("blocks").innerHTML = highlight(out.join("\n"));
+    })();
+  </script>
+</body>
+</html>

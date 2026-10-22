@@ -33,6 +33,8 @@
     P("b500", "blue/500", "#007AFF"),
     P("b700", "blue/700", "#0040DD"),
     P("scrim", "scrim", "#000000", 0.4),
+    // an alias to a variable that lives in a team library (not exported, so its value is written)
+    V("legacy", "brand/legacy", "C1", "COLOR", { p: alias("LIB_CORAL") }),
 
     T("bg", "bg/surface", "white", "g900", "white", "var(--surface)"),
     T("bg2", "bg/raised", "g50", "g800", "white", "var(--surface-raised)"),
@@ -45,8 +47,11 @@
     N("r", "radius/card", 20),
     N("fs", "font/size/body", 17),
     N("fw", "font/weight/semibold", 600),
+    N("lh", "font/line-height/body", 1.4),
     V("ff", "font/family/sans", "C3", "STRING", { t: "Inter, system-ui, sans-serif" }),
   ];
+
+  const library = [V("LIB_CORAL", "Brand/Coral", "LIB", "COLOR", { lib: rgb("#FF453A") })];
 
   root.makeDemoFigma = function (post) {
     return {
@@ -56,7 +61,7 @@
       variables: {
         getLocalVariableCollectionsAsync: async () => collections,
         getLocalVariablesAsync: async () => variables,
-        getVariableByIdAsync: async (id) => variables.find((v) => v.id === id) || null,
+        getVariableByIdAsync: async (id) => variables.concat(library).find((v) => v.id === id) || null,
       },
     };
   };

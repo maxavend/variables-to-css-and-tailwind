@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="t"><title id="t">Abanico de modos</title>
-<g transform="translate(-14 -34)"><rect x="60" y="74" width="132" height="132" rx="30" fill="#FF5C5C" transform="rotate(28 60 206)"/>
-<rect x="60" y="74" width="132" height="132" rx="30" fill="#FFB524" transform="rotate(14 60 206)"/>
-<rect x="60" y="74" width="132" height="132" rx="30" fill="#2F6BFF" transform="rotate(0 60 206)"/>
-<path fill="#fff" d="M95.00 131.00 L113.00 131.00 A9.0 9.0 0 0 1 113.00 149.00 L95.00 149.00 A9.0 9.0 0 0 1 95.00 131.00Z"/>
-<path fill="#fff" d="M139.00 131.00 L157.00 131.00 A9.0 9.0 0 0 1 157.00 149.00 L139.00 149.00 A9.0 9.0 0 0 1 139.00 131.00Z"/></g>
-</svg>

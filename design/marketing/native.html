@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>At home in Figma</title>
+  <link rel="stylesheet" href="shared.css" />
+  <style>
+    .stage { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 720px; align-items: center; padding: 0 150px; gap: 80px; }
+    h2 { margin: 44px 0 24px; }
+    .points { display: grid; gap: 22px; margin-top: 52px; }
+    .point { display: flex; gap: 18px; align-items: baseline; font-size: 26px; letter-spacing: -0.012em; }
+    .point i { width: 12px; height: 12px; border-radius: 4px; flex: none; transform: translateY(-3px); }
+    .point span { color: var(--ink-2); }
+    .point b { font-weight: 600; color: var(--ink); }
+    .pair { position: relative; height: 880px; }
+    .pair .window { position: absolute; transform: scale(1.06); transform-origin: top left; }
+    .pair .window:first-child { left: 0; top: 0; }
+    .pair .window:last-child { left: 370px; top: 60px; }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div>
+      <div class="kicker"><img src="../logo/kit/final/glass/icon-glass.svg" alt="" />Tokens to Code</div>
+      <h2>At home in Figma.</h2>
+      <p class="lede">A native UI3 interface that follows Figma's light and dark themes.</p>
+      <div class="points">
+        <div class="point"><i style="background:var(--blue)"></i><span><b>Works offline.</b> No network requests, ever.</span></div>
+        <div class="point"><i style="background:var(--orange)"></i><span><b>Reads only local variables.</b> Nothing leaves your file.</span></div>
+        <div class="point"><i style="background:var(--red)"></i><span><b>Keyboard friendly.</b> Tab, Space, arrows and Enter.</span></div>
+      </div>
+    </div>
+    <div class="pair">
+      <div class="window">
+        <div class="window-bar"><img src="../logo/kit/final/glass/icon-glass.svg" alt="" />Tokens to Code<span class="x">✕</span></div>
+        <iframe src="harness.html?theme=light&amp;sel=C2&amp;run=1&amp;scroll=%3Aroot%5Bdata-theme%3D%22dark" title="Plugin, light theme"></iframe>
+      </div>
+      <div class="window dark">
+        <div class="window-bar"><img src="../logo/kit/final/glass/icon-glass.svg" alt="" />Tokens to Code<span class="x">✕</span></div>
+        <iframe src="harness.html?theme=dark&amp;sel=C2&amp;run=1&amp;tab=tailwind&amp;scroll=%22surface%22" title="Plugin, dark theme"></iframe>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

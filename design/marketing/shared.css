@@ -57,3 +57,13 @@ code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-featu
 .code .str { color: var(--c-str); }
 .code .num { color: var(--c-num); }
 .code.dark { --c-com: #7F8C98; --c-sel: #FF7AB2; --c-prop: #67B7A4; --c-str: #FF8170; --c-num: #D9C97C; --c-plain: #F5F5F7; }
+
+/* layout used by the feature slides: text on top, visual pinned to the bottom */
+.top { position: absolute; left: 150px; right: 150px; top: 110px; }
+.top h2 { margin: 44px 0 24px; }
+.top .lede { max-width: 1240px; }
+.lede code { font-size: 28px; color: var(--ink); white-space: nowrap; }
+.bottom { position: absolute; left: 150px; right: 150px; bottom: 110px; }
+.card { background: #fff; border-radius: 28px; box-shadow: 0 0 0 1px var(--line), 0 2px 6px rgba(0,0,0,.04), 0 18px 44px rgba(0,0,0,.07); }
+.label { font: 600 20px "Inter"; color: var(--ink-2); letter-spacing: -0.01em; display: flex; align-items: center; gap: 10px; }
+.label i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }

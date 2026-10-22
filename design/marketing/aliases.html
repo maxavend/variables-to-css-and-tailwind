@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Aliases stay aliases</title>
+  <link rel="stylesheet" href="shared.css" />
+  <style>
+    .rows { display: grid; gap: 20px; }
+    .row { display: grid; grid-template-columns: 640px 80px 1fr; align-items: center; padding: 38px 40px; }
+    .var { display: flex; align-items: center; gap: 18px; font-size: 27px; font-weight: 500; letter-spacing: -0.01em; }
+    .var .name { min-width: 250px; }
+    .sw { width: 26px; height: 26px; border-radius: 7px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.1); flex: none; }
+    .pill { display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px 8px 10px; border-radius: 10px; background: #F2F2F7; font-size: 23px; }
+    .pill .sw { width: 22px; height: 22px; border-radius: 6px; }
+    .pill small { font-size: 16px; color: var(--ink-3); margin-left: 4px; }
+    .arrow { color: var(--ink-3); font-size: 34px; text-align: center; }
+    .row .code { font-size: 24px; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div class="kicker"><img src="../logo/kit/final/glass/icon-glass.svg" alt="" />Tokens to Code</div>
+    <h2>Aliases stay aliases.</h2>
+    <p class="lede">Semantic variables keep pointing to your primitives with <code>var()</code>. An alias to a library variable gets its value, with a comment that says where it came from.</p>
+  </div>
+  <div class="bottom rows">
+    <div class="row card">
+      <div class="var"><span class="name">text/primary</span><span class="pill"><span class="sw" style="background:#1D1D1F"></span>gray/900</span></div>
+      <div class="arrow">→</div><div class="code" data-prop="--text-primary"></div>
+    </div>
+    <div class="row card">
+      <div class="var"><span class="name">accent</span><span class="pill"><span class="sw" style="background:#007AFF"></span>blue/500</span></div>
+      <div class="arrow">→</div><div class="code" data-prop="--accent"></div>
+    </div>
+    <div class="row card">
+      <div class="var"><span class="name">brand/legacy</span><span class="pill"><span class="sw" style="background:#FF453A"></span>Brand/Coral<small>Team library</small></span></div>
+      <div class="arrow">→</div><div class="code" data-prop="--brand-legacy"></div>
+    </div>
+  </div>
+  <script src="highlight.js"></script>
+  <script>
+    (async () => {
+      const lines = (await (await fetch("out/demo.css")).text()).split("\n");
+      for (const el of document.querySelectorAll("[data-prop]")) {
+        // first occurrence = the default (Light) mode
+        el.innerHTML = highlight(lines.find((l) => l.trim().startsWith(el.dataset.prop + ":")).trim());
+      }
+    })();
+  </script>
+</body>
+</html>
