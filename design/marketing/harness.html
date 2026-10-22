@@ -9,7 +9,7 @@
   <meta charset="utf-8" />
   <title>Plugin harness</title>
   <style>
-    html, body { margin: 0; background: transparent; }
+    html, body { margin: 0; background: transparent; overflow: hidden; }
     iframe { display: block; width: 320px; height: 720px; border: 0; }
   </style>
 </head>
@@ -61,8 +61,14 @@
         const line = area.value.slice(0, area.value.indexOf(q.get("scroll"))).split("\n").length - 1;
         area.scrollTop = line * parseFloat(getComputedStyle(area).lineHeight) - 4;
       }
-      // drop focus rings so the screenshot looks idle
-      doc.activeElement && doc.activeElement.blur();
+      // Keep the screenshot idle: the UI and its result toast move focus around (and scroll the panel
+      // with it) at times we don't control, so keep dropping focus and undoing that scroll
+      setInterval(() => {
+        doc.querySelectorAll("input, textarea, button").forEach((el) => el.blur());
+        doc.querySelectorAll("*").forEach((el) => { if (el.tagName !== "TEXTAREA" && el.scrollTop) el.scrollTop = 0; });
+        frame.contentWindow.scrollTo(0, 0);
+        window.scrollTo(0, 0);
+      }, 50);
       document.body.dataset.ready = "1";
     });
   </script>
