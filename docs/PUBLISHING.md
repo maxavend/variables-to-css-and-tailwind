@@ -42,9 +42,9 @@ Figma desktop → **Plugins → Manage plugins** → *Tokens to Code* (antes *Va
 |---|---|---|
 | Icon | `assets/icon.png` | 128 × 128 px |
 | Cover art | `assets/cover.png` | 1920 × 1080 px |
-| Carousel | `assets/carousel/01-cover.png` … `08-native.png`, en ese orden | 1920 × 1080 px |
+| Carousel | `assets/carousel/01-cover.png` … `09-end.png`, en ese orden | 1920 × 1080 px |
 
-El carrusel cuenta el producto en 8 imágenes:
+El carrusel cuenta el producto en 9 imágenes:
 
 | # | Archivo | Mensaje |
 |---|---|---|
@@ -56,6 +56,7 @@ El carrusel cuenta el producto en 8 imágenes:
 | 6 | `06-values.png` | Valores listos para pegar (RGB, alpha, px, sin unidad) |
 | 7 | `07-tailwind.png` | Tema de Tailwind que apunta a las variables |
 | 8 | `08-native.png` | UI3 claro y oscuro, sin red, con teclado |
+| 9 | `09-end.png` | Cierre: ícono, frase y dónde encontrar el plugin |
 
 Las imágenes se generan desde `design/marketing/`. Muestran la UI real del plugin y la salida real de `code.js` con un sistema de variables de demo (`demo-figma.js`):
 

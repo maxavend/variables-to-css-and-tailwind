@@ -15,8 +15,8 @@ SERVER=$!
 trap 'kill $SERVER; rm -rf "$PROFILE"' EXIT
 sleep 1
 
-# carousel order; slide 1 is also the cover
-PAGES=(cover selection modes aliases names values tailwind native)
+# carousel order; slide 1 is also the cover, the last one closes
+PAGES=(cover selection modes aliases names values tailwind native end)
 mkdir -p out/slides
 for i in "${!PAGES[@]}"; do
   page=${PAGES[$i]}
